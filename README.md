@@ -3,8 +3,8 @@
 A private infrastructure dashboard with sampled metric history, thermal detail,
 T3 session navigation, account usage, and an application launcher.
 
-This is the standalone application repository. Infrastructure provisioning and
-deployment tooling live in the private [operator repository](https://github.com/nsoliven/homebase/tree/29532d0ef6291facd9cb49a63d989c6763f3441c/scripts/homebase).
+This is the standalone application repository. Infrastructure provisioning,
+operator deployment tooling, and production configuration are maintained separately.
 Node.js 24 is required for the backend's built-in SQLite support.
 
 ```sh
