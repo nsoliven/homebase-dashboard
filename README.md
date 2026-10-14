@@ -34,6 +34,8 @@ or credentials were used.
 
 ![Application launcher with synthetic catalogue entries](docs/screenshots/applications.png)
 
+![Fan RPM history and a qualitative sound estimate using sample data](docs/screenshots/cooling.png)
+
 ## Data boundaries
 
 Runtime configuration is supplied by `HOMEBASE_CONFIG` outside this repository.
@@ -50,3 +52,24 @@ Metric averages, lows, peaks, and nearest-rank P99 are calculated from original
 finite samples. Chart downsampling does not change those summaries. Per-sensor
 history begins when that sensor starts reporting; missing prior measurements
 are never generated. Summary sample counts and observation coverage are shown.
+
+Cooling details show read-only fan tachometer RPM with the same historical
+summaries. Zero RPM can indicate an unused header or a stopped fan; it is not
+treated as proof of failure. Missing readings remain unavailable.
+
+Optional `cooling.channels` in the external runtime configuration assigns sensor
+IDs a name, a `fan` or `pump` role, a `maxRpm` reference, and a `confirmed` flag.
+Unassigned channels and pumps are excluded from the airflow estimate. Real
+sensor mappings and hardware profiles belong outside this repository.
+
+Estimated sound is a qualitative heuristic based on fan RPM divided by its
+configured reference speed: below 35% is quiet, below 55% light airflow, below
+80% audible airflow, and otherwise strong airflow. It is not measured dBA and
+does not account for case acoustics, room noise, listener distance, or pump tone.
+Inferred channel assignments remain visibly marked.
+
+The non-X3D Ryzen 7000 X models use a 95°C thermal-limit reference. Near-limit
+temperature under load is shown as boost context; high temperature at light
+load or readings more than 2°C above the reference request a check. The 2°C
+margin is a dashboard alert heuristic, not a revised hardware safety limit.
+See [AMD's thermal explanation](https://community.amd.com/t5/gaming/ryzen-7000-series-processors-let-s-talk-about-power-temperature/ba-p/554629).

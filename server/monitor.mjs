@@ -1,6 +1,7 @@
 import https from 'node:https';
 import { readFileSync } from 'node:fs';
 import { chartValues, deriveAlerts, guestFromResource, percent } from './model.mjs';
+import { coolingStatus } from './cooling.mjs';
 
 export function requestProxmox(config, path) {
   if (!config) return Promise.reject(new Error('not_configured'));
@@ -77,6 +78,7 @@ export class Monitor {
         swapUsed: status.swap?.used, swapTotal: status.swap?.total, uptime: status.uptime, load: status.loadavg?.map(Number), version: status.pveversion,
         pressure: hostFeed && !hostFeed.stale ? hostFeed.data.pressure : null, cpuTemperature: hostFeed && !hostFeed.stale ? hostFeed.data.cpuTemperature : null,
         temperatures: hostFeed && !hostFeed.stale ? hostFeed.data.temperatures : [], zfsHealth: hostFeed && !hostFeed.stale ? hostFeed.data.zfsHealth : null,
+        cooling: {...coolingStatus(hostFeed && !hostFeed.stale ? hostFeed.data.fans : [],this.config.cooling),observedAt:hostFeed && !hostFeed.stale ? hostFeed.observed : null},
         ...(hostFeed && !hostFeed.stale ? this.hostRates : {}), backupAt: backup, storage: resources.filter(r => r.type === 'storage').map(r => ({ name: r.storage, type: r.plugintype, status: r.status, used: r.disk, total: r.maxdisk, content: r.content })),
       };
     }

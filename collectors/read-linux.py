@@ -31,9 +31,24 @@ def collect():
                 values[fields[0]] = float(metrics.get('avg60', 0))
         pressure[kind] = values or None
     temperatures = []
+    fans = []
     package = None
     for hw in Path('/sys/class/hwmon').glob('hwmon*'):
         name = read(hw / 'name')
+        device = str((hw / 'device').resolve() if (hw / 'device').exists() else hw.resolve().parent.parent)
+        for path in sorted(hw.glob('fan*_input'), key=lambda p: int(re.search(r'fan(\d+)', p.name)[1])):
+            raw = read(path)
+            try:
+                rpm = int(raw)
+            except ValueError:
+                continue
+            if not 0 <= rpm <= 20000:
+                continue
+            channel = int(re.search(r'fan(\d+)', path.name)[1])
+            label = read(path.with_name(path.name.replace('_input', '_label')))
+            identity = hashlib.sha256(f'{name}:{device}:{path.name}'.encode()).hexdigest()[:16]
+            fans.append({'id': identity, 'name': label or f'Fan channel {channel}',
+                         'label': f'{name} / fan{channel}', 'rpm': rpm})
         for path in hw.glob('temp*_input'):
             value = read(path)
             if not value:
@@ -63,7 +78,7 @@ def collect():
         'name': socket.gethostname(), 'os': os_name,
         'total': memory.get('MemTotal'), 'available': memory.get('MemAvailable'),
         'swapTotal': memory.get('SwapTotal'), 'swapUsed': memory.get('SwapTotal', 0) - memory.get('SwapFree', 0),
-        'pressure': pressure, 'temperatures': temperatures, 'cpuTemperature': package,
+        'pressure': pressure, 'temperatures': temperatures, 'fans': fans, 'cpuTemperature': package,
         'diskReadBytes': disk_read, 'diskWriteBytes': disk_write,
     }
 

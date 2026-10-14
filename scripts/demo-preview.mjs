@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { resolve, extname, sep } from 'node:path';
 import { summarize } from '../server/statistics.mjs';
+import { coolingStatus } from '../server/cooling.mjs';
 
 const root = resolve(fileURLToPath(new URL('../dist/', import.meta.url)));
 const GiB = 1024 ** 3;
@@ -19,9 +20,11 @@ const temperatures = [
   ['network', 'Network', 'Network controller', 'controller / temp1', 38.6],
 ].map(([id, group, name, label, value]) => ({id, group, name, label, value}));
 const pressure = {cpu:{some:1.2,full:0},memory:{some:0.1,full:0},io:{some:0.4,full:0.1}};
+const fanReadings=[{id:'sample-fan',name:'Radiator fan',label:'Sample fan channel',rpm:1480},{id:'sample-pump',name:'AIO pump',label:'Sample pump channel',rpm:3200},{id:'sample-case',name:'Case fan',label:'Sample case channel',rpm:1050},{id:'sample-unused',name:'Unassigned channel',label:'Sample unused channel',rpm:0}];
+const cooling={...coolingStatus(fanReadings,{description:'Synthetic cooling profile. Actual sound varies with the case and listening position.',channels:[{id:'sample-fan',role:'fan',confirmed:true,maxRpm:2450},{id:'sample-case',role:'fan',confirmed:true,maxRpm:2000},{id:'sample-pump',role:'pump',confirmed:true,maxRpm:3200}]}),observedAt:now};
 const host = {
   name:'Compute host', cpuModel:'AMD Ryzen 9 · 12-core processor', threads:24,
-  cpu:32.8, cpuTemperature:68.4, temperatures, load:[4.12,3.68,3.21],
+  cpu:32.8, cpuTemperature:68.4, temperatures, cooling, load:[4.12,3.68,3.21],
   uptime:734400, memoryUsed:42*GiB, memoryTotal:96*GiB, memoryAvailable:54*GiB,
   swapUsed:0, pressure, zfsHealth:'ONLINE', backupAt:now-7200000,
   diskReadRate:18e6, diskWriteRate:6e6,
@@ -77,6 +80,7 @@ function history(range) {
       'host.diskWrite':(5+burst*9)*1e6,'router.down':28+burst*45,'router.up':6+burst*12,
       'router.latency':12+wave*2,'router.packetLoss':0};
     for(const t of temperatures)values[`temperature.${t.id}`]=t.id==='cpu-package'?values['host.temperature']:t.value+wave*2+burst*3;
+    for(const f of fanReadings)values[`fan.${f.id}`]=f.rpm===0?0:f.rpm+(f.id==='sample-pump'?wave*15:wave*80+burst*350);
     for(const v of vms){values[`vm.${v.id}.cpu`]=v.cpu===null?null:v.cpu+wave*3;values[`vm.${v.id}.memory`]=v.status==='running'?25+wave*2:null;values[`vm.${v.id}.pressure`]=v.status==='running'?0.1:null;}
     return {ts:now-span+i*span/240,values};
   });

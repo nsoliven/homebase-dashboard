@@ -1,3 +1,4 @@
+import { thermalState } from './cooling.mjs';
 export const finite = value => typeof value === 'number' && Number.isFinite(value) ? value : null;
 export const percent = (used, total) => total > 0 && Number.isFinite(used) ? used / total * 100 : null;
 const text = (value, max = 200) => typeof value === 'string' ? value.slice(0, max) : '';
@@ -12,6 +13,7 @@ export function sanitizeFeed(scope, payload) {
     name: text(payload.name), os: text(payload.os, 80), total: number(payload.total), available: number(payload.available),
     swapUsed: number(payload.swapUsed), swapTotal: number(payload.swapTotal), pressure: psi(payload.pressure),
     temperatures: Array.isArray(payload.temperatures) ? payload.temperatures.slice(0, 30).map(t => ({ id: text(t.id, 80), name: text(t.name, 100), group: text(t.group, 40), label: text(t.label, 80), value: number(t.value, 150) })) : [],
+    fans: Array.isArray(payload.fans) ? payload.fans.slice(0, 32).map(f => ({id:text(f.id,80),name:text(f.name,100),label:text(f.label,100),rpm:number(f.rpm,20000)})).filter(f=>f.id && f.rpm !== null) : [],
     cpuTemperature: number(payload.cpuTemperature, 150), zfsHealth: text(payload.zfsHealth), diskReadBytes: number(payload.diskReadBytes), diskWriteBytes: number(payload.diskWriteBytes),
   };
   if (scope === 'router') return { model: text(payload.model, 80), firmware: text(payload.firmware, 100), uptime: number(payload.uptime), clients: number(payload.clients, 10000), wanRx: number(payload.wanRx), wanTx: number(payload.wanTx), interface: text(payload.interface, 40), latency: number(payload.latency, 60000), packetLoss: number(payload.packetLoss, 100) };
@@ -57,7 +59,8 @@ export function deriveAlerts(snapshot) {
   const add = (id, title, detail, severity, target) => alerts.push({ id, title, detail, severity, target, signature: `${title}:${detail}` });
   if (snapshot.host && snapshot.sources.find(s => s.id === 'proxmox')?.status === 'connected') {
     if (snapshot.host.pressure?.memory?.some > 5) add('host:pressure', 'Host memory contention', `Memory PSI ${snapshot.host.pressure.memory.some.toFixed(1)}%.`, 'warning', 'compute');
-    if (snapshot.host.cpuTemperature > 85) add('host:temperature', 'CPU temperature is elevated', `${snapshot.host.cpuTemperature.toFixed(0)}°C package temperature.`, 'warning', 'compute');
+    const thermal=thermalState(snapshot.host);
+    if (thermal.alert) add('host:temperature', thermal.label, `${snapshot.host.cpuTemperature.toFixed(1)}°C package${Number.isFinite(snapshot.host.cpu)?` · ${snapshot.host.cpu.toFixed(0)}% CPU`:''}${thermal.limit ? ` · ${thermal.limit}°C rated limit` : ''}.`, 'warning', 'compute');
     for (const s of snapshot.host.storage || []) if (percent(s.used, s.total) >= 85) add(`host:storage:${s.name}`, `${s.name} is nearing capacity`, `${percent(s.used, s.total).toFixed(0)}% used.`, 'warning', 'storage');
   }
   for (const vm of snapshot.vms) {
@@ -78,6 +81,7 @@ export function chartValues(snapshot) {
     'host.diskRead': hostFresh ? snapshot.host?.diskReadRate : null, 'host.diskWrite': hostFresh ? snapshot.host?.diskWriteRate : null,
     'host.temperature': snapshot.host?.cpuTemperature ?? null,
     ...Object.fromEntries((snapshot.host?.temperatures || []).filter(t=>t.id).map(t=>[`temperature.${t.id}`,t.value])),
+    ...Object.fromEntries((snapshot.host?.cooling?.fans || []).filter(f=>f.id).map(f=>[`fan.${f.id}`,f.rpm])),
     'router.latency': snapshot.router?.latency ?? null, 'router.packetLoss': snapshot.router?.packetLoss ?? null,
     'router.down': snapshot.router?.downMbps ?? null, 'router.up': snapshot.router?.upMbps ?? null,
     'nas.read': snapshot.nas?.readRate ?? null, 'nas.write': snapshot.nas?.writeRate ?? null,

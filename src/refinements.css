@@ -75,6 +75,34 @@
 .host-temperature { text-align:left;display:flex;flex-direction:column;align-items:flex-start;padding:0; }
 .host-temperature strong { font-size:16px!important; }
 .host-temperature:hover span { color:var(--accent); }
+.cooling-summary { display:flex;align-items:center;gap:14px;width:100%;padding:15px 0 3px;border-top:1px solid var(--line);text-align:left; }
+.cooling-summary > svg { color:var(--muted);flex-shrink:0; }
+.cooling-summary > svg:last-child { margin-left:auto; }
+.cooling-summary span { min-width:0; }
+.cooling-summary small { display:block;font-size:9px;color:var(--muted);margin-bottom:5px; }
+.cooling-summary strong { display:block;font-size:11px;font-weight:500;font-variant-numeric:tabular-nums;line-height:1.4; }
+.cooling-summary:hover strong { color:var(--accent); }
+.compute-footer > span.warning-text { color:var(--amber); }
+.thermal-context { font-size:11px;line-height:1.7;color:var(--body);margin:-4px 0 20px; }
+.chart-placeholder { display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:var(--muted);text-align:center;padding:20px;font-size:12px; }
+.chart-placeholder > svg { color:var(--body); }
+.chart-placeholder > span { color:var(--body);font-weight:500; }
+.chart-placeholder > small { display:block;font-size:10px;line-height:1.6; }
+.sound-estimate { border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:18px;background:var(--surface-raised); }
+.sound-estimate > div:first-child { display:flex;align-items:flex-start;gap:12px; }
+.sound-estimate > div > div { flex:1; }
+.sound-estimate .eyebrow { font-size:9px;color:var(--body); }
+.sound-estimate strong { display:block;font-size:21px;font-weight:500;letter-spacing:-.5px;margin-top:7px; }
+.sound-estimate p { font-size:11px;line-height:1.7;color:var(--body);margin-top:8px; }
+.sound-scale { display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin:18px 0 13px; }
+.sound-scale i { display:block;height:5px;border-radius:4px;background:var(--line-strong); }
+.sound-scale .filled i { background:var(--accent); }
+.sound-scale small { display:block;font-size:9px;color:var(--muted);margin-top:6px; }
+.sound-estimate summary,.inactive-fans summary { cursor:pointer;font-size:10px;color:var(--body);line-height:1.6; }
+.inactive-fans { margin-top:15px; }
+.inactive-fans .sensor-table-wrap { margin-top:10px; }
+.alert-item > button:first-of-type { display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;text-align:left; }
+@media(max-width:600px) { .cooling-summary { gap:10px;flex-wrap:wrap; }.cooling-summary > svg:first-child { display:none; }.cooling-sound { flex-basis:100%; }.sound-estimate { padding:15px; }.sound-estimate strong { font-size:19px; }.metric-hero { flex-wrap:wrap; } }
 .agent-row > div { min-width:0; }
 .agent-row strong { display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;line-height:1.6;overflow-wrap:anywhere; }
 .agent-row p { font-size:11px;color:var(--muted);margin-top:7px;line-height:1.5; }

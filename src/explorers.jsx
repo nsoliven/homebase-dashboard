@@ -1,28 +1,50 @@
 import React, { useState } from 'react';
-import { ArrowUpRight, Cpu, ExternalLink, LayoutGrid, Search, Thermometer } from 'lucide-react';
+import { ArrowUpRight, Cpu, ExternalLink, Fan, LayoutGrid, Search, Thermometer, Volume2 } from 'lucide-react';
+import { thermalState } from '../server/cooling.mjs';
 import { age, bytes, fmt, isNumber, percentage } from './api.js';
 import { Badge, Chart, Dialog, Empty, Meter } from './components.jsx';
 import { useHistory } from './hooks.js';
 
 export function RangeTabs({range,setRange}) { return <div className="range-tabs" role="group" aria-label="Detail time range">{[['1h','60 minutes'],['24h','24 hours'],['7d','7 days']].map(([value,label])=><button key={value} aria-pressed={range===value} className={range===value?'selected':''} onClick={()=>setRange(value)}>{label}</button>)}</div>; }
 
-export function Statistics({summary,unit='',scale=1}) {
-  return <div className="metric-statistics">{[['average','Average'],['low','Low'],['high','Peak'],['p99','P99']].map(([key,label])=><div key={key}><span title={key==='p99'?'99th percentile of recorded samples':undefined}>{label}</span><strong>{fmt(isNumber(summary?.[key])?summary[key]/scale:null)}<small>{unit}</small></strong></div>)}</div>;
+export function Statistics({summary,unit='',scale=1,decimals=1}) {
+  return <div className="metric-statistics">{[['average','Average'],['low','Low'],['high','Peak'],['p99','P99']].map(([key,label])=><div key={key}><span title={key==='p99'?'99th percentile of recorded samples':undefined}>{label}</span><strong>{fmt(isNumber(summary?.[key])?summary[key]/scale:null,decimals)}<small>{unit}</small></strong></div>)}</div>;
 }
 
-export function HostExplorer({host,close}) {
-  const [range,setRange]=useState('1h'),[metric,setMetric]=useState('Temperature'),[sensor,setSensor]=useState(null);
+export function CoolingSummary({cooling,onOpen}) {
+  const noise=cooling?.noise, fans=cooling?.fans||[];
+  const fastest=Math.max(0,...fans.filter(f=>f.role==='fan').map(f=>f.rpm));
+  const pump=fans.find(f=>f.role==='pump'&&f.rpm>0);
+  return <button className="cooling-summary" onClick={onOpen} aria-label="Open cooling details"><Fan size={17}/><span><small>Fan speed</small><strong>{fastest?`${fmt(fastest,0)} RPM`:'Unavailable'}</strong></span><span><small>{pump?.confirmed?'Pump':'Pump · inferred'}</small><strong>{pump?`${fmt(pump.rpm,0)} RPM`:'Unassigned'}</strong></span><span className="cooling-sound"><small>Estimated sound</small><strong>{noise?.level?noise.label:'Awaiting fan reference'}</strong></span><ArrowUpRight size={14}/></button>;
+}
+
+function CoolingDetail({cooling,statistics,onSelect,selected}) {
+  const fans=cooling?.fans||[], active=fans.filter(f=>f.rpm>0), inactive=fans.filter(f=>f.rpm===0), noise=cooling?.noise;
+  const rows=list=><tbody>{list.map(f=>{const stat=statistics?.[`fan.${f.id}`];return <tr key={f.id} className={selected===f.id?'sensor-selected':''}><th><button onClick={()=>onSelect(f.id)}>{f.name}<ArrowUpRight size={12}/></button><small>{f.role==='unassigned'?'Unassigned header':`${f.role}${f.confirmed?'':' · inferred'}`} · {f.label}</small></th><td>{fmt(f.rpm,0)}</td>{['average','low','high','p99'].map(k=><td key={k}>{fmt(stat?.[k],0)}</td>)}</tr>;})}</tbody>;
+  const table=list=><div className="sensor-table-wrap"><table className="sensor-table"><thead><tr><th>Fan / pump channel</th><th>RPM now</th><th>Average</th><th>Low</th><th>Peak</th><th>P99</th></tr></thead>{rows(list)}</table></div>;
+  return <section className="detail-section cooling-detail"><div className="detail-section-heading"><Fan size={16}/><h3>Cooling & sound</h3><span>{cooling?.observedAt?`Measured ${age(cooling.observedAt)}`:'No fresh readings'}</span></div>
+    <div className="sound-estimate"><div><Volume2 size={18}/><div><span className="eyebrow">ESTIMATED SOUND</span><strong>{noise?.label||'Sound estimate unavailable'}</strong><p>{noise?.description||'A fan reading and a rated-speed reference are needed.'}</p></div><Badge>Approximate</Badge></div><div className="sound-scale" aria-label={noise?.level?`${noise.label}, estimated level ${noise.level} of 4`:'Sound level unknown'}>{['Quiet','Light','Audible','Strong'].map((label,i)=><span key={label} className={noise?.level>=i+1?'filled':''}><i/><small>{label}</small></span>)}</div><details><summary>How this estimate works</summary><p>{noise?.basis||'No microphone measurement.'}</p>{cooling?.description&&<p>{cooling.description}</p>}<p>Fan RPM does not prove coolant flow. Pump channels are excluded from the airflow estimate.</p></details></div>
+    {fans.length?<>{active.length?table(active):<Empty title="No rotation reported" text="Zero tach readings can mean stopped fans or unconnected headers."/>}{inactive.length>0&&<details className="inactive-fans"><summary>{inactive.length} channels with zero tach readings</summary><p className="muted-note">Connection status is unknown. These readings are not fan-failure alarms.</p>{table(inactive)}</details>}</>:<Empty title="Fan RPM unavailable" text="The host has not reported fan sensors. Sound is not estimated from CPU temperature."/>}
+  </section>;
+}
+
+export function HostExplorer({host,close,initialMetric='Temperature'}) {
+  const [range,setRange]=useState('1h'),[metric,setMetric]=useState(initialMetric),[sensor,setSensor]=useState(null);
   const history=useHistory(range);
   const selected=host.temperatures.find(t=>t.id===sensor);
-  const metrics={Temperature:{key: sensor?`temperature.${sensor}`:'host.temperature',title:selected?.name||'CPU package temperature',value:selected?.value??host.cpuTemperature,unit:'°C'},CPU:{key:'host.cpu',title:'CPU utilization',value:host.cpu,unit:'%',max:100},Memory:{key:'host.memory',title:'Memory utilization',value:percentage(host.memoryUsed,host.memoryTotal),unit:'%',max:100},'Disk I/O':{key:'host.diskRead',secondary:'host.diskWrite',title:'Disk throughput · read / write',value:host.diskReadRate,unit:'MB/s',scale:1e6}};
+  const fan=host.cooling?.fans?.find(f=>f.id===sensor)||host.cooling?.fans?.find(f=>f.role==='fan'&&f.rpm>0)||host.cooling?.fans?.find(f=>f.rpm>0);
+  const thermal=thermalState(host);
+  const metrics={Temperature:{key: sensor?`temperature.${sensor}`:'host.temperature',title:selected?.name||'CPU package temperature',value:selected?.value??host.cpuTemperature,unit:'°C'},CPU:{key:'host.cpu',title:'CPU utilization',value:host.cpu,unit:'%',max:100},Fans:{key:`fan.${fan?.id||'unavailable'}`,title:fan?.name||'Fan speed',value:fan?.rpm,unit:' RPM'},Memory:{key:'host.memory',title:'Memory utilization',value:percentage(host.memoryUsed,host.memoryTotal),unit:'%',max:100},'Disk I/O':{key:'host.diskRead',secondary:'host.diskWrite',title:'Disk throughput · read / write',value:host.diskReadRate,unit:'MB/s',scale:1e6}};
   const current=metrics[metric],summary=history.statistics?.[current.key];
   const groups=[...new Set(host.temperatures.map(t=>t.group||'Other'))];
   return <Dialog title={host.name} close={close}><div className="detail-subtitle"><Badge><Cpu size={12}/>{host.threads} threads</Badge><span>{host.cpuModel}</span></div>
     <div className="explorer-toolbar"><div className="chart-tabs" role="group" aria-label="Host detail metric">{Object.keys(metrics).map(m=><button key={m} aria-pressed={metric===m} className={metric===m?'selected':''} onClick={()=>{setMetric(m);setSensor(null);}}>{m}</button>)}</div><RangeTabs range={range} setRange={setRange}/></div>
-    <section className="metric-explorer"><div className="metric-hero"><div><span className="eyebrow">{current.title}</span><strong>{fmt(isNumber(current.value)?current.value/(current.scale||1):null)}<small>{current.unit}</small></strong></div><Badge tone={metric==='Temperature'&&current.value>85?'warning':'neutral'}>Latest reading</Badge></div>
-      <Statistics summary={summary} unit={current.unit} scale={current.scale}/>
+    <section className="metric-explorer"><div className="metric-hero"><div><span className="eyebrow">{current.title}</span><strong>{fmt(isNumber(current.value)?current.value/(current.scale||1):null,metric==='Fans'?0:1)}<small>{current.unit}</small></strong></div><Badge tone={metric==='Temperature'&&!sensor?thermal.tone:'neutral'}>{metric==='Temperature'&&!sensor?thermal.label:'Latest reading'}</Badge></div>
+      {metric==='Temperature'&&!sensor&&thermal.limit&&<p className="thermal-context">{fmt(host.cpu,0)}% overall CPU · {thermal.limit}°C rated limit. Boost can reach this limit before overall utilization reaches 100%.</p>}
+      <Statistics summary={summary} unit={current.unit} scale={current.scale} decimals={metric==='Fans'?0:1}/>
       {history.error?<Empty title="History unavailable" text={history.error}/>:<Chart points={history.points} loading={history.loading} metric={current.key} secondary={current.secondary} scale={current.scale} unit={current.unit} title={current.title} max={current.max} height={175}/>}<div className="sample-note">{summary?`${summary.count.toLocaleString()} recorded samples · ${new Date(summary.from).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'})} onwards`:'History is collecting. Earlier sensor readings are not estimated.'}<span>P99 uses original samples</span></div>
     </section>
+    <CoolingDetail cooling={host.cooling} statistics={history.statistics} selected={sensor} onSelect={id=>{setSensor(id);setMetric('Fans');}}/>
     <section className="detail-section"><div className="detail-section-heading"><Thermometer size={16}/><h3>Thermal sensors</h3><span>°C · selected time range</span></div><div className="sensor-table-wrap"><table className="sensor-table"><thead><tr><th>Sensor</th><th>Now</th><th>Average</th><th>Low</th><th>Peak</th><th>P99</th></tr></thead>{groups.map(group=><tbody key={group}><tr className="sensor-group"><th colSpan={6}>{group}</th></tr>{host.temperatures.filter(t=>(t.group||'Other')===group).map((t,i)=>{const stat=history.statistics?.[`temperature.${t.id}`];return <tr key={t.id||`${t.label}-${i}`} className={sensor===t.id?'sensor-selected':''}><th><button disabled={!t.id} onClick={()=>{setSensor(t.id);setMetric('Temperature');}}>{t.name||t.label}<ArrowUpRight size={12}/></button><small>{t.label}{host.temperatures.filter(other=>other.name===t.name).length>1?` · sensor ${i+1}`:''}</small></th><td className={group==='CPU'&&t.value>85?'warm':''}>{fmt(t.value)}</td>{['average','low','high','p99'].map(k=><td key={k}>{fmt(stat?.[k])}</td>)}</tr>;})}</tbody>)}</table></div></section>
     <section className="detail-section"><div className="detail-section-heading"><h3>Host health</h3><span>Live measurements</span></div><div className="detail-stat-grid"><div><span>Memory available</span><strong>{bytes(host.memoryAvailable)}</strong></div><div><span>Swap used</span><strong>{bytes(host.swapUsed)}</strong></div><div><span>ZFS summary</span><strong>{host.zfsHealth||'Unavailable'}</strong></div><div><span>Last backup task</span><strong className="small-reading">{host.backupAt?new Date(host.backupAt).toLocaleString():'No recent successful task'}</strong></div></div><div className="pressure-grid">{['cpu','memory','io'].map(k=><div key={k}><span>{k.toUpperCase()} pressure</span><strong>{fmt(host.pressure?.[k]?.some)}<small>%</small></strong><p>Some · 60-second average<br/>Full {fmt(host.pressure?.[k]?.full)}%</p></div>)}</div></section>
   </Dialog>;
