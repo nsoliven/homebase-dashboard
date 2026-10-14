@@ -10,14 +10,22 @@ export function safeApplications(input) {
   });
 }
 const seconds=value=>{const n=Date.parse(value);return Number.isFinite(n)?n/1000:null;};
-const pct=value=>typeof value==='number'&&Number.isFinite(value)&&value>=0&&value<=100?value:null;
+// CLI Proxy's recovered quota endpoint uses fractions, not percentages.
+const fractionPercent=value=>typeof value==='number'&&Number.isFinite(value)&&value>=0&&value<=1?Math.round(value*100*1e6)/1e6:null;
+function weeklyUsed(account) {
+  const capacity=account.kappa===undefined?1:account.kappa;
+  if (typeof capacity!=='number'||!Number.isFinite(capacity)||capacity<=0) return null;
+  const left=fractionPercent(typeof account.left==='number'?account.left/capacity:null);
+  return left===null?null:100-left;
+}
 export function proxyReport(raw) {
   return {status:raw.stale?'stale':'connected',observedAt:Date.parse(raw.generated_at)||null,
     accounts:(Array.isArray(raw.accounts)?raw.accounts:[]).slice(0,50).map((a,i)=>({
       id:`account-${i+1}`,name:String(a.name||`Account ${i+1}`).slice(0,120),status:String(a.status||'unknown').slice(0,30),
-      observedAt:Date.parse(a.last_sample_at)||null,windows:[
-        {id:'five-hour',label:'5-hour window',usedPercent:pct(a.used_5h),resetsAt:seconds(a.resets_5h)},
-        {id:'weekly',label:'Weekly window',usedPercent:pct(typeof a.left==='number'?100-a.left:null),resetsAt:seconds(a.resets)},
+      observedAt:Date.parse(a.last_sample_at)||null,reportStale:raw.stale===true,
+      source:['header','usage'].includes(a.last_source)?a.last_source:null,windows:[
+        {id:'five-hour',label:'5-hour window',usedPercent:fractionPercent(a.used_5h),resetsAt:seconds(a.resets_5h),durationMins:300},
+        {id:'weekly',label:'Weekly window',usedPercent:weeklyUsed(a),resetsAt:seconds(a.resets),durationMins:10080},
       ].filter(w=>w.usedPercent!==null),
     }))};
 }

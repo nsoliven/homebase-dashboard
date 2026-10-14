@@ -57,8 +57,8 @@ const applications = [
   ['monitoring','Monitoring','Applications','Signals across the lab'],
 ].map(([id,name,category,description])=>({id,name,category,description}));
 const integrations = {applications,proxy:{status:'connected',observedAt:now,accounts:[
-  {id:'sample-a',name:'Personal account',status:'available',observedAt:now,windows:windows(24,31)},
-  {id:'sample-b',name:'Work account',status:'available',observedAt:now,windows:windows(12,18)},
+  {id:'sample-a',name:'Personal account',status:'DRAINING',observedAt:now,source:'header',windows:windows(3,1)},
+  {id:'sample-b',name:'Work account',status:'NEXT',observedAt:now-55*60_000,source:'usage',windows:windows(7,2)},
 ]}};
 const snapshot = {
   observedAt:now,host,vms,agents,alerts:[],nas:null,

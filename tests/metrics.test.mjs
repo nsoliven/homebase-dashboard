@@ -33,7 +33,7 @@ test('private application catalogue rejects unsafe or credential-bearing destina
   assert.equal(result.length,1);assert.equal(result[0].id,'sample');
 });
 test('proxy exposes quota fields without raw credential material',()=>{
-  const r=proxyReport({generated_at:'2026-01-01T00:00:00Z',stale:false,secret:'NEVER_EXPORT',accounts:[{name:'Sample account',left:25,used_5h:20,resets:'2026-01-02T00:00:00Z',access_token:'NEVER_EXPORT',last_sample_at:'2026-01-01T00:00:00Z'}]});
+  const r=proxyReport({generated_at:'2026-01-01T00:00:00Z',stale:false,secret:'NEVER_EXPORT',accounts:[{name:'Sample account',left:.25,used_5h:.2,resets:'2026-01-02T00:00:00Z',access_token:'NEVER_EXPORT',last_sample_at:'2026-01-01T00:00:00Z'}]});
   assert.equal(r.accounts[0].windows.find(w=>w.id==='weekly').usedPercent,75);
   assert.equal(r.accounts[0].windows.find(w=>w.id==='five-hour').usedPercent,20);
   assert.ok(!JSON.stringify(r).includes('NEVER_EXPORT'));

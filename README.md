@@ -36,6 +36,8 @@ or credentials were used.
 
 ![Fan RPM history and a qualitative sound estimate using sample data](docs/screenshots/cooling.png)
 
+![Correct quota percentages with current and historical sample account readings](docs/screenshots/quotas.png)
+
 ## Data boundaries
 
 Runtime configuration is supplied by `HOMEBASE_CONFIG` outside this repository.
@@ -47,6 +49,13 @@ The authenticated `/api/integrations` endpoint exposes only selected account
 quota fields and the operator's configured application catalogue. Management
 credentials remain server-side. Application links use IDs resolved from that
 catalogue; arbitrary redirect destinations are rejected.
+
+The CLI Proxy pacing report uses fractional 5-hour utilization and normalized
+account-week capacity (`left / kappa`). Homebase converts these to percentages;
+it never treats `0.99` remaining as `0.99%`. Quota freshness uses each account's
+provider-observation time, not the generated report timestamp. After ten minutes
+a reading is historical. Passed reset times and rolled-forward pacing projections
+wait for a new observation; they never imply a freshly replenished quota.
 
 Metric averages, lows, peaks, and nearest-rank P99 are calculated from original
 finite samples. Chart downsampling does not change those summaries. Per-sensor

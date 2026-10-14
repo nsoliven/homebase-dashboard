@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { ArrowUpRight, Cpu, ExternalLink, Fan, LayoutGrid, Search, Thermometer, Volume2 } from 'lucide-react';
 import { thermalState } from '../server/cooling.mjs';
+import { quotaReading } from '../server/quota.mjs';
 import { age, bytes, fmt, isNumber, percentage } from './api.js';
 import { Badge, Chart, Dialog, Empty, Meter } from './components.jsx';
 import { useHistory } from './hooks.js';
@@ -50,7 +51,17 @@ export function HostExplorer({host,close,initialMetric='Temperature'}) {
   </Dialog>;
 }
 
-export function ProxyAccounts({proxy,launchId}) {return <div className="proxy-accounts"><div className="detail-description">Claude account windows come from CLI Proxy. Each account keeps its own limits and reset times.</div>{launchId&&<a className="secondary-button launch-link" href={`/api/apps/${launchId}/open`} target="_blank" rel="noopener noreferrer">Open CLI Proxy <ExternalLink size={14}/></a>}{proxy?.accounts?.length?proxy.accounts.map(a=><section key={a.id} className="proxy-account"><div className="proxy-account-heading"><strong>{a.name}</strong><Badge>{a.status}</Badge></div>{a.windows.map(w=><div className="account-window" key={w.id}><div><span>{w.label}</span><strong>{fmt(100-w.usedPercent,0)}<small>% left</small></strong></div><Meter value={100-w.usedPercent} label={`${a.name} ${w.label} remaining`}/><small>{w.resetsAt?`Resets ${new Date(w.resetsAt*1000).toLocaleString()}`:'Reset time unavailable'} · observed {age(a.observedAt)}</small></div>)}</section>):<Empty title="CLI Proxy readings unavailable" text="The private proxy connector will retry automatically."/>}</div>;}
+export function ProxyAccounts({proxy,launchId}) {
+  return <div className="proxy-accounts"><div className="detail-description">Claude account windows come from CLI Proxy. Each account keeps its own limits and reset times. Readings older than ten minutes are shown as historical.</div>{launchId&&<a className="secondary-button launch-link" href={`/api/apps/${launchId}/open`} target="_blank" rel="noopener noreferrer">Open CLI Proxy <ExternalLink size={14}/></a>}
+    {proxy?.accounts?.length?proxy.accounts.map(a=>{
+      const current=a.windows.some(w=>quotaReading(a,w).state==='current');
+      return <section key={a.id} className={`proxy-account ${current?'':'quota-outdated'}`}><div className="proxy-account-heading"><strong>{a.name}</strong><Badge tone={current?'success':'warning'}>{current?'Current reading':a.observedAt?'Historical reading':'No observation'}</Badge></div><div className="proxy-account-context"><span>Routing plan: {a.status}</span><span>Observed {age(a.observedAt)}{a.source?` · ${a.source==='header'?'response headers':'usage API'}`:''}</span></div>
+        {a.windows.map(w=>{const r=quotaReading(a,w),live=r.state==='current';return <div className={`account-window ${live?'':'quota-outdated-window'}`} key={w.id}><div><span>{w.label}</span><strong>{fmt(live?r.currentRemaining:r.state==='stale'?r.remaining:null,0)}<small>{live?'% left':r.state==='stale'?'% last reported':''}</small></strong></div><Meter value={live?r.currentRemaining:r.state==='stale'?r.remaining:null} tone={live?'accent':'neutral'} label={`${a.name} ${w.label} ${live?'remaining':'last reported remaining'}`}/><small>{r.state==='expired'?'Window ended · awaiting a new provider reading':r.state==='unknown-reset'?'Reset time unavailable':r.state==='unavailable'?'Current reading unavailable':w.resetsAt?`Resets ${new Date(w.resetsAt*1000).toLocaleString()}`:'Reset time unavailable'}{r.state==='stale'&&' · stale; current remaining is unknown'}</small></div>;})}
+        {!a.windows.length&&<Empty title="No quota window reported"/>}
+      </section>;
+    }):<Empty title="CLI Proxy readings unavailable" text="The private proxy connector will retry automatically."/>}
+  </div>;
+}
 
 export function Applications({applications}) {
   const [query,setQuery]=useState(''),[category,setCategory]=useState('All');

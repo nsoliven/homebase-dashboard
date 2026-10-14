@@ -61,6 +61,10 @@
 .launch-link { text-decoration:none;display:inline-flex;align-items:center;gap:9px;margin:10px 0 18px; }
 .proxy-account { border:1px solid var(--line);border-radius:13px;padding:18px;margin-top:16px; }
 .proxy-account-heading { display:flex;align-items:center;justify-content:space-between;gap:10px;font-size:13px;overflow-wrap:anywhere; }
+.proxy-account-context { display:flex;justify-content:space-between;flex-wrap:wrap;gap:7px;margin-top:10px;color:var(--muted);font-size:10px;line-height:1.6; }
+.quota-outdated-window strong,.proxy-preview .quota-outdated strong { color:var(--body); }
+.quota-outdated-window .meter > span { background:var(--muted); }
+.quota-outdated .proxy-account-heading .badge { flex-shrink:0; }
 .account-window { padding-top:18px; }
 .account-window > div:first-child { display:flex;justify-content:space-between;align-items:center;margin-bottom:9px;gap:10px; }
 .account-window span { font-size:11px;color:var(--body); }
