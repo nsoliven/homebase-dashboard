@@ -40,6 +40,8 @@ test('expired and rolled-forward projections never become current 100% readings'
   assert.equal(quotaReading(a,a.windows[0],now).state,'expired');
   const rolled=proxyReport(fixture({last_sample_at:'2026-10-13T20:00:00Z',resets:'2026-10-21T19:00:00Z'})).accounts[0];
   assert.equal(quotaReading(rolled,rolled.windows[1],now).state,'expired');
+  const justRolled=proxyReport(fixture({left:1,last_sample_at:'2026-10-14T19:59:30Z',resets:'2026-10-21T19:59:50Z'})).accounts[0];
+  assert.equal(quotaReading(justRolled,justRolled.windows[1],now).state,'expired');
   const unknown=proxyReport(fixture({resets_5h:null})).accounts[0];
   assert.equal(quotaReading(unknown,unknown.windows[0],now).state,'unknown-reset');
 });

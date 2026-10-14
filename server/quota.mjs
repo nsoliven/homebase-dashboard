@@ -12,7 +12,7 @@ export function quotaReading(account, window, now = Date.now()) {
   const duration = window?.durationMins * 60_000;
   // The pacing endpoint can roll a lapsed window forward. That projection is
   // not a new provider observation and must never masquerade as a reset reading.
-  if (reset <= now || Number.isFinite(duration) && duration > 0 && observed < reset-duration-60_000)
+  if (reset <= now || Number.isFinite(duration) && duration > 0 && observed < reset-duration)
     return {remaining, currentRemaining:null, state:'expired'};
   if (account.reportStale || now-observed >= QUOTA_FRESH_MS)
     return {remaining, currentRemaining:null, state:'stale'};
