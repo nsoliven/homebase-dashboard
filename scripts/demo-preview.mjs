@@ -1,0 +1,106 @@
+// Isolated screenshot/demo server. Never loads production config or credentials.
+import http from 'node:http';
+import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
+import { resolve, extname, sep } from 'node:path';
+import { summarize } from '../server/statistics.mjs';
+
+const root = resolve(fileURLToPath(new URL('../dist/', import.meta.url)));
+const GiB = 1024 ** 3;
+const now = Date.now();
+const temperatures = [
+  ['cpu-package', 'CPU', 'CPU package', 'k10temp / Tctl', 68.4],
+  ['cpu-1', 'CPU', 'CPU chiplet 1', 'k10temp / Tccd1', 64.2],
+  ['cpu-2', 'CPU', 'CPU chiplet 2', 'k10temp / Tccd2', 61.8],
+  ['gpu', 'GPU', 'GPU edge', 'amdgpu / edge', 43.1],
+  ['memory-1', 'Memory', 'Memory module 1', 'spd5118 / temp1', 46.5],
+  ['memory-2', 'Memory', 'Memory module 2', 'spd5118 / temp1', 45.8],
+  ['drive', 'Storage', 'Drive composite', 'nvme / Composite', 39.7],
+  ['network', 'Network', 'Network controller', 'controller / temp1', 38.6],
+].map(([id, group, name, label, value]) => ({id, group, name, label, value}));
+const pressure = {cpu:{some:1.2,full:0},memory:{some:0.1,full:0},io:{some:0.4,full:0.1}};
+const host = {
+  name:'Compute host', cpuModel:'AMD Ryzen 9 · 12-core processor', threads:24,
+  cpu:32.8, cpuTemperature:68.4, temperatures, load:[4.12,3.68,3.21],
+  uptime:734400, memoryUsed:42*GiB, memoryTotal:96*GiB, memoryAvailable:54*GiB,
+  swapUsed:0, pressure, zfsHealth:'ONLINE', backupAt:now-7200000,
+  diskReadRate:18e6, diskWriteRate:6e6,
+  storage:[{name:'Fast storage',type:'ZFS',status:'available',used:680*GiB,total:2048*GiB}],
+};
+const vms = ['Workspace','Gateway','Web services','Build runner','Sandbox'].map((name,i) => ({
+  id:200+i, name, node:'Compute host', type:i===2?'lxc':'qemu',
+  status:i===4?'stopped':'running', uptime:120000, cpu:i===4?null:7+i*4,
+  cores:4, memoryUsed:(3+i)*GiB, memoryTotal:16*GiB, diskTotal:128*GiB,
+  os:'Debian Linux', guest:i===4?null:{total:16*GiB,available:(13-i)*GiB,swapUsed:0,pressure},
+  guestStale:i===4, guestUpdatedAt:now, memoryScope:'guest',
+}));
+const agents = [
+  ['Refine the metrics view','codex','working'],
+  ['Review network health','claude','review'],
+  ['Prepare release notes','codex','idle'],
+].map(([name,provider,status],i)=>({id:`demo-session-${i}`,name,provider,status,project:'Homebase',branch:'main',source:'T3 Code',updatedAt:now}));
+const windows = (fiveHour,weekly) => [
+  {id:'five-hour',label:'5-hour window',usedPercent:fiveHour,resetsAt:Math.floor(now/1000)+10800,durationMins:300},
+  {id:'weekly',label:'Weekly window',usedPercent:weekly,resetsAt:Math.floor(now/1000)+345600,durationMins:10080},
+];
+const applications = [
+  ['cli-proxy','CLI Proxy','Tools','Account routing and usage'],
+  ['t3','T3 Code','Tools','Your coding workspace'],
+  ['hypervisor','Hypervisor','Infrastructure','Machines and resources'],
+  ['network','Network console','Infrastructure','Connectivity and devices'],
+  ['storage','Storage console','Infrastructure','Pools, capacity, and health'],
+  ['documents','Documents','Applications','A place for your files'],
+  ['photos','Photo library','Applications','Browse your collection'],
+  ['monitoring','Monitoring','Applications','Signals across the lab'],
+].map(([id,name,category,description])=>({id,name,category,description}));
+const integrations = {applications,proxy:{status:'connected',observedAt:now,accounts:[
+  {id:'sample-a',name:'Personal account',status:'available',observedAt:now,windows:windows(24,31)},
+  {id:'sample-b',name:'Work account',status:'available',observedAt:now,windows:windows(12,18)},
+]}};
+const snapshot = {
+  observedAt:now,host,vms,agents,alerts:[],nas:null,
+  quotas:{codex:{observedAt:now,windows:windows(18,26)},claude:null},
+  router:{model:'Network gateway',firmware:'Stable release',uptime:734400,clients:24,
+    interface:'wan0',downMbps:42.8,upMbps:8.2,latency:12,packetLoss:0},
+  sources:['proxmox','host','nas','router','agents','quotas'].map(id=>({
+    id,label:{proxmox:'Proxmox',host:'Host telemetry',nas:'TrueNAS',router:'Network',agents:'T3 sessions',quotas:'AI usage'}[id],
+    status:id==='nas'?'unavailable':'connected',observedAt:id==='nas'?null:now,
+    message:id==='nas'?'Configure a dedicated read-only connection.':'Sample readings for this demo.',
+  })),
+};
+function history(range) {
+  const span = {'1h':3600000,'24h':86400000,'7d':604800000}[range]||86400000;
+  const points = Array.from({length:241},(_,i)=>{
+    const wave=Math.sin(i/14), burst=Math.max(0,Math.sin(i/9))*Math.max(0,Math.sin(i/31));
+    const values={'host.cpu':25+wave*8+burst*35,'host.memory':43+Math.sin(i/40)*3,
+      'host.temperature':62+wave*3+burst*14,'host.diskRead':(14+burst*25)*1e6,
+      'host.diskWrite':(5+burst*9)*1e6,'router.down':28+burst*45,'router.up':6+burst*12,
+      'router.latency':12+wave*2,'router.packetLoss':0};
+    for(const t of temperatures)values[`temperature.${t.id}`]=t.id==='cpu-package'?values['host.temperature']:t.value+wave*2+burst*3;
+    for(const v of vms){values[`vm.${v.id}.cpu`]=v.cpu===null?null:v.cpu+wave*3;values[`vm.${v.id}.memory`]=v.status==='running'?25+wave*2:null;values[`vm.${v.id}.pressure`]=v.status==='running'?0.1:null;}
+    return {ts:now-span+i*span/240,values};
+  });
+  const statistics=Object.fromEntries(Object.keys(points[0].values).map(key=>{
+    const valid=points.filter(p=>Number.isFinite(p.values[key]));
+    return [key,valid.length?{...summarize(valid.map(p=>p.values[key])),from:valid[0].ts,to:valid.at(-1).ts}:null];
+  }));
+  return {points,statistics};
+}
+const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.woff2':'font/woff2'};
+http.createServer(async(req,res)=>{
+  const url=new URL(req.url,'http://127.0.0.1');
+  let data;
+  if(url.pathname==='/api/session')data={user:{name:'Demo operator'},csrf:'sample-only',configured:true};
+  else if(['/api/snapshot','/api/refresh'].includes(url.pathname))data=snapshot;
+  else if(url.pathname==='/api/integrations')data=integrations;
+  else if(url.pathname==='/api/history')data=history(url.searchParams.get('range'));
+  else if(url.pathname.startsWith('/api/')||url.pathname.startsWith('/auth/')){res.writeHead(404);res.end('Demo links are disabled.');return;}
+  if(data){res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify(data));return;}
+  try{
+    const filename=resolve(root,'.'+(url.pathname==='/'?'/index.html':url.pathname));
+    if(!filename.startsWith(root+sep)&&filename!==resolve(root,'index.html'))throw new Error('Invalid path');
+    let body=await readFile(filename);
+    if(extname(filename)==='.html')body=Buffer.from(body.toString().replace('</body>','<div style="position:fixed;bottom:8px;right:14px;padding:5px 9px;border:1px solid #dedee5;border-radius:6px;background:white;color:#666;font:11px system-ui;z-index:9999">Sample data · screenshot demo</div></body>'));
+    res.writeHead(200,{'Content-Type':types[extname(filename)]||'application/octet-stream'});res.end(body);
+  }catch{res.writeHead(404);res.end('Not found');}
+}).listen(4320,'127.0.0.1',()=>console.log('Sample-data preview: http://127.0.0.1:4320'));

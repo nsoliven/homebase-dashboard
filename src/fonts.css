@@ -1,0 +1,15 @@
+/* Self-host only the character set this prototype uses; no external font calls. */
+@font-face {
+  font-family: 'Inter Variable';
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url('@fontsource-variable/inter/files/inter-latin-wght-normal.woff2') format('woff2-variations');
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('@fontsource/jetbrains-mono/files/jetbrains-mono-latin-400-normal.woff2') format('woff2');
+}
