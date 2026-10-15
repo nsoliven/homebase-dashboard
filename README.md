@@ -38,6 +38,44 @@ or credentials were used.
 
 ![Correct quota percentages with current and historical sample account readings](docs/screenshots/quotas.png)
 
+![GPU and CPU showcase at idle, sample data](docs/screenshots/compute-idle.png)
+
+![GPU and CPU showcase under a simulated load, sample data](docs/screenshots/compute-load.png)
+
+![A details modal while a forced refresh is running, sample data](docs/screenshots/refresh-modal.png)
+
+## Force refresh
+
+Every card and details modal has a refresh control. `POST /api/refresh/<source>`
+(session + same-origin CSRF) accepts only known source IDs:
+
+- `proxmox` re-reads the Proxmox API now.
+- `proxy` calls CLI Proxy's fixed loopback `.../routing/quota/refresh` route,
+  which polls each account's usage, then bypasses the 15-second cache.
+- Collector scopes (`host`, `router`, `agents`, `quotas`, `compute`, `guest:<id>`)
+  are handed to the authenticated bridge through a long-poll at
+  `GET /api/ingest/requests`. The reply only names scopes the collector is
+  already allowed to send; the bridge maps each one to its own fixed collector.
+  The route waits up to 25 seconds for the new reading.
+
+Each source can be refreshed once per 10 seconds (30 seconds for provider
+quota sources). Passive sources (the Claude status line), unconnected sources,
+and scopes whose bridge is not listening are shown disabled with the reason.
+
+## GPU & CPU showcase
+
+`collectors/read-compute.py` is piped to the hypervisor by the bridge as
+`python3 -`. It runs only fixed `nvidia-smi --query-*` argv lists (no shell)
+and reads numeric `/proc` and hwmon files; process names are reduced to the
+executable basename. Board fan and temperature IDs match `read-linux.py`, so
+`cooling.channels` roles and reference speeds apply. Per-thread load and
+package power (RAPL) are differences between consecutive readings; the first
+reading after a gap shows them as measuring. While the panel is visible the
+browser polls `/api/compute?live=1`, which asks the bridge for 3-second
+collection for 12 seconds at a time; otherwise the bridge collects every 30
+seconds. Fan spin follows reported fan duty (GPU) or RPM (board), and glows
+follow load and temperature. Reduced-motion users get a static illustration.
+
 ## Data boundaries
 
 Runtime configuration is supplied by `HOMEBASE_CONFIG` outside this repository.

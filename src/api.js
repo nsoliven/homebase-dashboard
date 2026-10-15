@@ -7,6 +7,18 @@ export async function request(path, options = {}) {
   }
   return response.json();
 }
+/** Source refresh replies carry useful bodies for 202/409/429/502 too. */
+export async function refreshSource(id, csrf) {
+  const response = await fetch(`/api/refresh/${encodeURIComponent(id)}`, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Homebase-CSRF': csrf } });
+  let body = null;
+  try { body = await response.json(); } catch { body = null; }
+  if (response.status === 401 || response.status === 403 || !body?.status) {
+    const error = new Error(response.status === 401 ? 'Your session has expired. Sign in again.' : 'The refresh could not complete. Please retry.');
+    error.status = response.status;
+    throw error;
+  }
+  return body;
+}
 export const isNumber = n => typeof n === 'number' && Number.isFinite(n);
 export const fmt = (n, digits = 1) => isNumber(n) ? n.toLocaleString(undefined, { maximumFractionDigits: digits, minimumFractionDigits: digits }) : '—';
 export function bytes(n, digits = 1) {

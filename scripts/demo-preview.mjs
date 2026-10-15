@@ -5,6 +5,8 @@ import { fileURLToPath } from 'node:url';
 import { resolve, extname, sep } from 'node:path';
 import { summarize } from '../server/statistics.mjs';
 import { coolingStatus } from '../server/cooling.mjs';
+import * as demoCompute from './demo-compute.mjs';
+import { setScenario } from './demo-compute.mjs';
 
 const root = resolve(fileURLToPath(new URL('../dist/', import.meta.url)));
 const GiB = 1024 ** 3;
@@ -65,12 +67,20 @@ const snapshot = {
   quotas:{codex:{observedAt:now,windows:windows(18,26)},claude:null},
   router:{model:'Network gateway',firmware:'Stable release',uptime:734400,clients:24,
     interface:'wan0',downMbps:42.8,upMbps:8.2,latency:12,packetLoss:0},
-  sources:['proxmox','host','nas','router','agents','quotas'].map(id=>({
-    id,label:{proxmox:'Proxmox',host:'Host telemetry',nas:'TrueNAS',router:'Network',agents:'T3 sessions',quotas:'AI usage'}[id],
+  sources:['proxmox','host','nas','router','agents','quotas','compute'].map(id=>({
+    id,label:{proxmox:'Proxmox',host:'Host telemetry',nas:'TrueNAS',router:'Network',agents:'T3 sessions',quotas:'AI usage',compute:'GPU & CPU'}[id],
     status:id==='nas'?'unavailable':'connected',observedAt:id==='nas'?null:now,
     message:id==='nas'?'Configure a dedicated read-only connection.':'Sample readings for this demo.',
   })),
 };
+const lastRefresh={};
+function refreshCapabilities(){
+  const ids=['proxmox','host','router','agents','quotas','proxy','compute',...vms.filter(v=>v.guest).map(v=>`guest:${v.id}`)];
+  return {...Object.fromEntries(ids.map(id=>[id,{id,available:true,minIntervalMs:10000,lastRequestedAt:lastRefresh[id]||null,reason:'Sample refresh for this demo.'}])),
+    nas:{id:'nas',available:false,reason:'TrueNAS is not connected, so there is nothing to re-collect.'},
+    'claude-statusline':{id:'claude-statusline',available:false,reason:'Claude status-line readings arrive only when Claude Code renders its status line after a real response. They cannot be requested.'}};
+}
+const demoSnapshot=()=>({...snapshot,compute:demoCompute.view(),refresh:refreshCapabilities()});
 function history(range) {
   const span = {'1h':3600000,'24h':86400000,'7d':604800000}[range]||86400000;
   const points = Array.from({length:241},(_,i)=>{
@@ -97,8 +107,23 @@ http.createServer(async(req,res)=>{
   if(/^\/api\/(apps|branding)\/[a-z0-9-]+\/icon$/.test(url.pathname)){
     res.writeHead(200,{'Content-Type':'image/svg+xml'});res.end(await readFile(resolve(root,'favicon.svg')));return;
   }
+  const scenarioRoute=url.pathname.match(/^\/demo\/scenario\/(idle|load)$/);
+  if(scenarioRoute){setScenario(scenarioRoute[1]);res.writeHead(302,{Location:'/'});res.end();return;}
+  const refreshRoute=url.pathname.match(/^\/api\/refresh\/([^/]+)$/);
+  if(refreshRoute&&req.method==='POST'){
+    // Synthetic delay so the in-progress state is visible in screenshots.
+    const id=decodeURIComponent(refreshRoute[1]),cap=refreshCapabilities()[id];
+    if(!cap?.available){res.writeHead(409,{'Content-Type':'application/json'});res.end(JSON.stringify({source:id,status:'unavailable',reason:cap?.reason||'Unknown source.',snapshot:demoSnapshot()}));return;}
+    await new Promise(r=>setTimeout(r,Number(process.env.DEMO_REFRESH_MS||2200)));
+    const at=Date.now();
+    if(id==='proxy')for(const a of integrations.proxy.accounts)a.observedAt=at;
+    else{const s=snapshot.sources.find(s=>s.id===id||id.startsWith('guest:')&&s.id==='host');if(s)s.observedAt=at;if(id==='proxmox')snapshot.observedAt=at;}
+    lastRefresh[id]=at;
+    res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({source:id,status:'updated',observedAt:at,snapshot:demoSnapshot(),...(id==='proxy'?{integrations}:{}),...(id==='compute'?{live:demoCompute.live()}:{})}));return;
+  }
   if(url.pathname==='/api/session')data={user:{name:'Demo operator'},csrf:'sample-only',configured:true};
-  else if(['/api/snapshot','/api/refresh'].includes(url.pathname))data=snapshot;
+  else if(['/api/snapshot','/api/refresh'].includes(url.pathname))data=demoSnapshot();
+  else if(url.pathname==='/api/compute')data=demoCompute.live();
   else if(url.pathname==='/api/integrations')data=integrations;
   else if(url.pathname==='/api/history')data=history(url.searchParams.get('range'));
   else if(url.pathname.startsWith('/api/')||url.pathname.startsWith('/auth/')){res.writeHead(404);res.end('Demo links are disabled.');return;}

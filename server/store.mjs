@@ -49,6 +49,9 @@ export class Store {
     }
     return { range, from: now - duration, to: now, points, statistics: Object.fromEntries([...samples].map(([key,values])=>[key,{...summarize(values),...bounds.get(key)}])) };
   }
+  recent(since) {
+    return this.db.prepare('SELECT ts,data FROM history WHERE ts>? ORDER BY ts').all(since).map(r => ({ ts: r.ts, values: JSON.parse(r.data) }));
+  }
   session(user) {
     const token = randomBytes(32).toString('base64url'), csrf = randomBytes(24).toString('base64url');
     this.db.prepare('INSERT INTO sessions VALUES(?,?,?,?)').run(hash(token), Date.now() + 12 * 3600_000, JSON.stringify(user), csrf);

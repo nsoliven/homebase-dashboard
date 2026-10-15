@@ -37,20 +37,28 @@ export class Integrations {
     const filename=kind==='apps'?this.applications().find(a=>a.id===id)?.iconFile:this.config.branding?.[id];
     return readPrivateIcon(this.config.iconsDirectory,filename);
   }
-  async readProxy() {
+  // refresh=true uses the quota fork's fixed sibling route (POST .../refresh), which
+  // polls each account's usage now and returns the same report. Loopback only.
+  async readProxy(refresh=false) {
     const p=this.config.proxy;
     if (!p) return {status:'unavailable',accounts:[]};
     try {
       const url=new URL(p.endpoint);
       if (!['127.0.0.1','localhost','[::1]'].includes(url.hostname)) throw new Error('Loopback endpoint required');
+      if (refresh) url.pathname=`${url.pathname.replace(/\/+$/,'')}/refresh`;
       const line=readFileSync(p.keyFile,'utf8').split('\n').find(s=>s.startsWith(`${p.keyVariable}=`));
       const key=line?.slice(line.indexOf('=')+1).trim().replace(/^(['"])(.*)\1$/,'$2');
       if (!key) throw new Error('Unavailable key');
-      const r=await fetch(url,{headers:{Authorization:`Bearer ${key}`},signal:AbortSignal.timeout(8000),redirect:'error'});
+      const r=await fetch(url,{method:refresh?'POST':'GET',headers:{Authorization:`Bearer ${key}`},signal:AbortSignal.timeout(refresh?20000:8000),redirect:'error'});
       if (!r.ok) throw new Error('Proxy unavailable');
       const raw=await r.text();if(raw.length>2_000_000)throw new Error('Response too large');
       return proxyReport(JSON.parse(raw));
     } catch { return {status:'unavailable',accounts:[]}; }
+  }
+  async refreshProxy() {
+    const proxy=await this.readProxy(true);
+    if (proxy.status==='connected') { await this.pending?.catch(()=>{}); this.cached=null; await this.snapshot(); }
+    return proxy;
   }
   async snapshot() {
     if (this.cached&&Date.now()-this.cached.at<15_000) return this.cached.data;

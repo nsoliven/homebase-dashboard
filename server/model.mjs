@@ -1,4 +1,5 @@
 import { thermalState } from './cooling.mjs';
+import { HISTORY_KEYS, sample, sanitizeCompute } from './compute.mjs';
 export const finite = value => typeof value === 'number' && Number.isFinite(value) ? value : null;
 export const percent = (used, total) => total > 0 && Number.isFinite(used) ? used / total * 100 : null;
 const text = (value, max = 200) => typeof value === 'string' ? value.slice(0, max) : '';
@@ -39,6 +40,7 @@ export function sanitizeFeed(scope, payload) {
     })) : [],
     alerts: Array.isArray(payload.alerts) ? payload.alerts.slice(0, 50).map(a => ({ id: text(a.id), level: text(a.level, 30), title: text(a.title, 160) })) : [],
   };
+  if (scope === 'compute') return sanitizeCompute(payload);
   throw new Error('Unsupported feed');
 }
 
@@ -86,6 +88,8 @@ export function chartValues(snapshot) {
     'router.down': snapshot.router?.downMbps ?? null, 'router.up': snapshot.router?.upMbps ?? null,
     'nas.read': snapshot.nas?.readRate ?? null, 'nas.write': snapshot.nas?.writeRate ?? null,
   };
+  const compute = snapshot.compute && !snapshot.compute.stale ? sample(snapshot.compute) : {};
+  for (const [key, history] of Object.entries(HISTORY_KEYS)) data[history] = compute[key] ?? null;
   for (const vm of snapshot.vms) {
     data[`vm.${vm.id}.cpu`] = hostFresh ? vm.cpu : null;
     data[`vm.${vm.id}.memory`] = hostFresh && vm.status === 'running' ? vm.guest ? percent(vm.guest.total - vm.guest.available, vm.guest.total) : percent(vm.memoryUsed, vm.memoryTotal) : null;

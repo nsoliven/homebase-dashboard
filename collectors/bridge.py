@@ -3,11 +3,13 @@
 import concurrent.futures
 import json
 import os
+import queue
 import re
 import selectors
 import signal
 import ssl
 import subprocess
+import threading
 import time
 import urllib.request
 from importlib.util import module_from_spec, spec_from_file_location
@@ -98,3 +100,130 @@ def codex_quota():
             process.wait(timeout=3)
         except subprocess.TimeoutExpired:
             process.kill()
+
+
+COMPUTE_PROBE = Path(__file__).with_name('read-compute.py')
+
+
+def compute_metrics(config):
+    """GPU/CPU telemetry: pipes the fixed read-only probe to the hypervisor."""
+    return json.loads(ssh(config['hostTarget'], 'python3 -', COMPUTE_PROBE.read_text()))
+
+
+class Delivery:
+    """Authenticated transport to the dashboard's collector endpoints."""
+
+    def __init__(self, config):
+        self.endpoint = config['endpoint']
+        self.key = config['key']
+        self.context = ssl.create_default_context(cafile=config['caFile']) if config.get('caFile') else None
+        self.requests_url = self.endpoint.rstrip('/') + '/requests'
+
+    def push(self, scope, data):
+        body = json.dumps({'scope': scope, 'observedAt': int(time.time() * 1000), 'data': data}).encode()
+        request = urllib.request.Request(self.endpoint, data=body, method='POST', headers={'Authorization': 'Bearer ' + self.key, 'Content-Type': 'application/json'})
+        with urllib.request.urlopen(request, context=self.context, timeout=8) as response:
+            if response.status != 200:
+                raise RuntimeError('Collector delivery failed')
+
+    def requests(self, wait):
+        """Long-poll for refresh requests. The reply only ever names scopes."""
+        request = urllib.request.Request(f'{self.requests_url}?wait={int(wait)}', headers={'Authorization': 'Bearer ' + self.key})
+        with urllib.request.urlopen(request, context=self.context, timeout=wait + 10) as response:
+            reply = json.loads(response.read(65536))
+        refresh = [s for s in reply.get('refresh', []) if isinstance(s, str)]
+        live = {s: v for s, v in (reply.get('live') or {}).items() if isinstance(s, str) and isinstance(v, dict)}
+        return refresh, live
+
+
+class Source:
+    """A fixed collector: `collect(forced)` returns data for one scope."""
+
+    def __init__(self, collect, interval=30, live_floor=2):
+        self.collect, self.interval, self.live_floor = collect, interval, live_floor
+
+
+class Scheduler:
+    """Runs each scope on its own interval and immediately on dashboard request.
+
+    A request can only name a scope already in `sources`; unknown names are
+    ignored, so the dashboard can never choose what runs or with what input.
+    `live` lets a visible panel shorten one scope's interval until it expires.
+    """
+
+    def __init__(self, sources, delivery, log=lambda message: print(message, flush=True), clock=time.monotonic):
+        self.sources, self.delivery, self.log, self.clock = sources, delivery, log, clock
+        self.events = queue.Queue()
+
+    def listen(self, stop):
+        backoff = 5
+        while not stop.is_set():
+            try:
+                self.events.put(('requests',) + self.delivery.requests(20))
+                backoff = 5
+            except Exception:
+                # Older dashboards without the endpoint: keep the timed schedule only.
+                stop.wait(backoff)
+                backoff = min(backoff * 2, 300)
+
+    def run(self, stop, workers=None):
+        due = {scope: 0.0 for scope in self.sources}
+        running, again, live_until, live_interval = set(), set(), {}, {}
+
+        def job(scope, forced):
+            try:
+                self.delivery.push(scope, self.sources[scope].collect(forced))
+            except Exception:
+                self.log(f'Homebase {scope} unavailable; next poll will retry.')
+            finally:
+                self.events.put(('done', scope))
+
+        def interval(scope, now):
+            source = self.sources[scope]
+            if live_until.get(scope, 0) > now:
+                return max(source.live_floor, min(source.interval, live_interval[scope]))
+            return source.interval
+
+        threading.Thread(target=self.listen, args=(stop,), daemon=True).start()
+        with concurrent.futures.ThreadPoolExecutor(max_workers=workers or len(self.sources) + 1) as pool:
+            def start(scope, forced):
+                running.add(scope)
+                pool.submit(job, scope, forced)
+
+            while not stop.is_set():
+                now = self.clock()
+                for scope in self.sources:
+                    if scope not in running and due[scope] <= now:
+                        start(scope, False)
+                idle = [max(0.05, due[s] - now) for s in self.sources if s not in running]
+                try:
+                    event = self.events.get(timeout=min(idle + [1.0]))
+                except queue.Empty:
+                    continue
+                now = self.clock()
+                if event[0] == 'done':
+                    scope = event[1]
+                    running.discard(scope)
+                    due[scope] = now + interval(scope, now)
+                    if scope in again:
+                        again.discard(scope)
+                        start(scope, True)
+                    continue
+                _, refresh, live = event
+                for scope, spec in live.items():
+                    if scope not in self.sources:
+                        continue
+                    try:
+                        live_interval[scope] = float(spec.get('intervalMs', 3000)) / 1000
+                        live_until[scope] = now + float(spec.get('ttlMs', 12000)) / 1000
+                    except (TypeError, ValueError):
+                        continue
+                    if scope not in running:
+                        due[scope] = min(due[scope], now + interval(scope, now))
+                for scope in refresh:
+                    if scope not in self.sources:
+                        continue
+                    if scope in running:
+                        again.add(scope)
+                    else:
+                        start(scope, True)
