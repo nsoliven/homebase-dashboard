@@ -3,11 +3,15 @@ import { Activity, X } from 'lucide-react';
 import { fmt, isNumber } from './api.js';
 
 export function Dot({ tone = 'green' }) { return <span className={`dot ${tone}`} aria-hidden="true" />; }
+export function AppIcon({src,fallback:Fallback,size=20}) {
+  const [failed,setFailed]=useState(null);
+  return src&&failed!==src?<img className="service-logo" src={src} alt="" width={size} height={size} loading="lazy" decoding="async" referrerPolicy="no-referrer" onError={()=>setFailed(src)}/>:<Fallback size={size}/>;
+}
 export function Badge({ children, tone = 'neutral' }) { return <span className={`badge ${tone}`}>{children}</span>; }
 export function IconButton({ icon: Icon, label, onClick, className = '', disabled }) { return <button className={`icon-button ${className}`} aria-label={label} title={label} onClick={onClick} disabled={disabled}><Icon size={17} /></button>; }
 export function Meter({ value, tone = 'accent', label }) { return <div className={`meter ${tone}`} {...(isNumber(value) ? { role: 'meter', 'aria-label': label, 'aria-valuenow': Math.round(value), 'aria-valuemin': 0, 'aria-valuemax': 100 } : {})}><span style={{ width: `${isNumber(value) ? value : 0}%` }} /></div>; }
 export function Ticks({ value, count = 50, tone = 'accent' }) { return <div className={`ticks ${tone}`} aria-hidden="true">{Array.from({ length: count }, (_, i) => <i key={i} className={isNumber(value) && i / count * 100 < value ? 'filled' : ''} />)}</div>; }
-export function Panel({ title, icon: Icon, action, children, className = '', id }) { return <section className={`panel ${className}`} data-panel={id} aria-label={title}><div className="panel-heading"><div className="panel-heading-title">{Icon && <Icon size={16} className="section-icon" />}<h2>{title}</h2></div>{action}</div>{children}</section>; }
+export function Panel({ title, icon: Icon, logo, action, children, className = '', id }) { return <section className={`panel ${className}`} data-panel={id} aria-label={title}><div className="panel-heading"><div className="panel-heading-title">{Icon && <AppIcon src={logo} fallback={Icon} size={16}/>}<h2>{title}</h2></div>{action}</div>{children}</section>; }
 export function Empty({ title = 'Waiting for measurements', text, icon: Icon = Activity, action }) { return <div className="empty-state"><Icon size={23} /><strong>{title}</strong>{text && <p>{text}</p>}{action}</div>; }
 export function Dialog({ title, close, children }) {
   const ref = useRef(null);

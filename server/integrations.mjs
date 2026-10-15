@@ -1,11 +1,12 @@
 import { readFileSync } from 'node:fs';
+import { readPrivateIcon } from './icons.mjs';
 
 export function safeApplications(input) {
   return (Array.isArray(input) ? input : []).slice(0,200).flatMap(a => {
     try {
       const url=new URL(a.url);
       if (!['http:','https:'].includes(url.protocol) || url.username || url.password || url.search || !/^[a-z0-9-]{1,80}$/.test(a.id)) return [];
-      return [{id:a.id,name:String(a.name).slice(0,100),url:url.href,category:String(a.category||'Applications').slice(0,50),description:String(a.description||'').slice(0,180)}];
+      return [{id:a.id,name:String(a.name).slice(0,100),url:url.href,category:String(a.category||'Applications').slice(0,50),description:String(a.description||'').slice(0,180),...(/^[a-z0-9][a-z0-9-]{0,79}\.(png|ico|webp)$/.test(a.iconFile||'')?{iconFile:a.iconFile}:{})}];
     } catch { return []; }
   });
 }
@@ -32,6 +33,10 @@ export function proxyReport(raw) {
 export class Integrations {
   constructor(config) { this.config=config;this.cached=null;this.pending=null; }
   applications() { try { return safeApplications(JSON.parse(readFileSync(this.config.applicationsFile,'utf8'))); } catch { return []; } }
+  icon(kind,id) {
+    const filename=kind==='apps'?this.applications().find(a=>a.id===id)?.iconFile:this.config.branding?.[id];
+    return readPrivateIcon(this.config.iconsDirectory,filename);
+  }
   async readProxy() {
     const p=this.config.proxy;
     if (!p) return {status:'unavailable',accounts:[]};
@@ -50,7 +55,9 @@ export class Integrations {
   async snapshot() {
     if (this.cached&&Date.now()-this.cached.at<15_000) return this.cached.data;
     if (!this.pending) this.pending=this.readProxy().then(proxy=>{
-      const data={applications:this.applications(),proxy};this.cached={at:Date.now(),data};return data;
+      const applications=this.applications().map(({iconFile,...a})=>({...a,iconUrl:iconFile?`/api/apps/${a.id}/icon`:null}));
+      const branding=Object.fromEntries(['proxmox','nas','router','agents','quotas','codex','claude'].filter(id=>typeof this.config.branding?.[id]==='string').map(id=>[id,`/api/branding/${id}/icon`]));
+      const data={applications,branding,proxy};this.cached={at:Date.now(),data};return data;
     }).finally(()=>{this.pending=null;});
     return this.pending;
   }

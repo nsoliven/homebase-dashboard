@@ -55,8 +55,8 @@ const applications = [
   ['documents','Documents','Applications','A place for your files'],
   ['photos','Photo library','Applications','Browse your collection'],
   ['monitoring','Monitoring','Applications','Signals across the lab'],
-].map(([id,name,category,description])=>({id,name,category,description}));
-const integrations = {applications,proxy:{status:'connected',observedAt:now,accounts:[
+].map(([id,name,category,description])=>({id,name,category,description,iconUrl:`/api/apps/${id}/icon`}));
+const integrations = {applications,branding:{nas:'/api/branding/nas/icon',proxmox:'/api/branding/proxmox/icon',router:'/api/branding/router/icon'},proxy:{status:'connected',observedAt:now,accounts:[
   {id:'sample-a',name:'Personal account',status:'DRAINING',observedAt:now,source:'header',windows:windows(3,1)},
   {id:'sample-b',name:'Work account',status:'NEXT',observedAt:now-55*60_000,source:'usage',windows:windows(7,2)},
 ]}};
@@ -94,6 +94,9 @@ const types={'.html':'text/html','.js':'text/javascript','.css':'text/css','.svg
 http.createServer(async(req,res)=>{
   const url=new URL(req.url,'http://127.0.0.1');
   let data;
+  if(/^\/api\/(apps|branding)\/[a-z0-9-]+\/icon$/.test(url.pathname)){
+    res.writeHead(200,{'Content-Type':'image/svg+xml'});res.end(await readFile(resolve(root,'favicon.svg')));return;
+  }
   if(url.pathname==='/api/session')data={user:{name:'Demo operator'},csrf:'sample-only',configured:true};
   else if(['/api/snapshot','/api/refresh'].includes(url.pathname))data=snapshot;
   else if(url.pathname==='/api/integrations')data=integrations;

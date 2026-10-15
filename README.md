@@ -41,6 +41,10 @@ or credentials were used.
 ## Data boundaries
 
 Runtime configuration is supplied by `HOMEBASE_CONFIG` outside this repository.
+Optional local icon files are supplied through `iconsDirectory`, catalogue
+`iconFile` entries, and a `branding` map. Real logos and mappings stay in private
+storage. Authenticated icon routes expose configured IDs only, reject active
+image formats and path escapes, and never fetch remote images in the browser.
 Application catalogues, service names, private addresses, account identities,
 and credentials must stay in private runtime files. Do not add a real catalogue
 or credential example here. Tests use synthetic application and account names.

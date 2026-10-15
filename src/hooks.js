@@ -37,7 +37,7 @@ export function useHistory(range, guest, enabled = true) {
 }
 
 export function useIntegrations(enabled) {
-  const [data,setData]=useState({applications:[],proxy:{status:'unavailable',accounts:[]}});
+  const [data,setData]=useState({applications:[],branding:{},proxy:{status:'unavailable',accounts:[]}});
   useEffect(()=>{if(!enabled)return;let cancelled=false; const controller=new AbortController();
     const load=async()=>{try{const next=await request('/api/integrations',{signal:controller.signal});if(!cancelled)setData(next);}catch{}};
     load();const timer=setInterval(()=>{if(!document.hidden)load();},30000);

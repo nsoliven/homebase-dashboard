@@ -61,6 +61,14 @@ export function createApp(config, store, monitor, auth = new Auth(config.oidc, s
       if (req.method === 'POST' && (req.headers.origin !== origin || req.headers['x-homebase-csrf'] !== session?.csrf)) return json(res, 403, { error: 'Request verification failed.' });
       if (url.pathname === '/api/logout' && req.method === 'POST') { store.logout(cookie(req, sessionCookie)); res.setHeader('Set-Cookie', setCookie(sessionCookie, '', 0)); return json(res, 200, { ok: true }); }
       if (url.pathname === '/api/integrations' && req.method === 'GET') return json(res, 200, await integrations.snapshot());
+      const icon=url.pathname.match(/^\/api\/(apps|branding)\/([a-z0-9-]{1,80})\/icon$/);
+      if(icon&&['GET','HEAD'].includes(req.method)) {
+        const asset=integrations.icon(icon[1],icon[2]);
+        if(!asset)return json(res,404,{error:'Icon unavailable.'});
+        res.setHeader('Content-Security-Policy',"default-src 'none'; sandbox");
+        res.writeHead(200,{'Content-Type':asset.type,'Content-Length':asset.data.length,'Cache-Control':'private, no-store'});
+        return res.end(req.method==='HEAD'?undefined:asset.data);
+      }
       const launch = url.pathname.match(/^\/api\/apps\/([a-z0-9-]{1,80})\/open$/);
       if (launch && req.method === 'GET') { const app = integrations.applications().find(a=>a.id===launch[1]); return app ? redirect(res,app.url) : json(res,404,{error:'Application unavailable.'}); }
       if (url.pathname === '/api/snapshot' && req.method === 'GET') return json(res, 200, monitor.snapshot());
