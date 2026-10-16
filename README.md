@@ -1,5 +1,7 @@
 # Homebase
 
+<p align="center"><a href="https://homebase.nevryk.com"><b>▶ Live demo: homebase.nevryk.com</b></a><br><sub>The real interface with sample data, served as a static site. No backend, no real readings.</sub></p>
+
 <p align="center"><img src="docs/screenshots/case-rgb.gif" alt="3D model of prox's Thermaltake The Tower 500 cycling RGB colors while smoke and streaks show the airflow" width="480"></p>
 
 <p align="center"><b>prox, live on the overview.</b> A 3D model of the Thermaltake The Tower 500 with the real parts inside, its fans, airflow you can see and the fan curves.<br><a href="docs/screenshots/case-demo.mp4">Watch the 76-second demo</a></p>
@@ -49,6 +51,17 @@ Fan readings are **modeled** from 2026-10-15 values until fan telemetry is conne
 | ![Case view with RGB off: studio lighting and soft shadows](docs/screenshots/case-studio.png) | ![Case view with RGB on in blue](docs/screenshots/case-rgb-blue.png) |
 | **X-ray with airflow** | **Cooling page** |
 | ![X-ray mode with smoke and streaks colored by temperature](docs/screenshots/case-xray-airflow.png) | ![The Cooling page with the case view](docs/screenshots/case-cooling-page.png) |
+
+## Live demo
+
+[homebase.nevryk.com](https://homebase.nevryk.com) is this UI built in static mode (`VITE_STATIC_DEMO=1`). Instead of calling the backend, it reads JSON files exported from the loopback sample server, and timestamps shift so the readings always look fresh. Refreshes and acknowledgements are accepted and ignored. It runs on Cloudflare as static assets only, with no Worker code.
+
+```sh
+node scripts/export-static-demo.mjs                        # builds dist-demo/ from synthetic data only
+npx wrangler@4 deploy -c deploy/live-demo.wrangler.jsonc   # homebase.nevryk.com
+```
+
+Never point the exporter at a production backend.
 
 ## Screenshots
 

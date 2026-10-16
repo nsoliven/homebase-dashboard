@@ -1,4 +1,6 @@
+import { STATIC_DEMO, staticRefresh, staticRequest } from './static-demo.js';
 export async function request(path, options = {}) {
+  if (STATIC_DEMO) return staticRequest(path, options);
   const response = await fetch(path, { credentials: 'same-origin', ...options, headers: { 'Content-Type': 'application/json', ...options.headers } });
   if (!response.ok) {
     const error = new Error(response.status === 401 ? 'Your session has expired. Sign in again.' : 'The request could not complete. Please retry.');
@@ -9,6 +11,7 @@ export async function request(path, options = {}) {
 }
 /** Source refresh replies carry useful bodies for 202/409/429/502 too. */
 export async function refreshSource(id, csrf) {
+  if (STATIC_DEMO) return staticRefresh(id);
   const response = await fetch(`/api/refresh/${encodeURIComponent(id)}`, { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Homebase-CSRF': csrf } });
   let body = null;
   try { body = await response.json(); } catch { body = null; }
