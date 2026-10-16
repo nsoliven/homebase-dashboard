@@ -41,6 +41,8 @@ button:focus-visible,.pt:focus-visible{outline:2px solid var(--accent);outline-o
 #view{display:block;width:100%;height:clamp(440px,76vh,880px);}
 /* framed: vh would be the frame's own height, so the dashboard sends its viewport height instead */
 html.embed #view{height:clamp(460px,calc(var(--host-vh,900px) * .74),900px);background:var(--scene-bg);touch-action:none;cursor:grab}
+.stage-hint{position:absolute;left:50%;bottom:12px;transform:translateX(-50%);font-size:11.5px;color:var(--muted);background:rgba(18,22,32,.72);border:1px solid var(--line);border-radius:999px;padding:4px 11px;pointer-events:none;white-space:nowrap;opacity:0;transition:opacity .2s}
+.scene:hover .stage-hint{opacity:1}
 .tip{position:absolute;pointer-events:none;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:7px 10px;box-shadow:var(--shadow);font-size:12px;transform:translate(-50%,-115%);white-space:nowrap}
 .tip b{display:block;font-size:13px}
 .tip span{font-family:var(--font-mono);color:var(--muted)}
@@ -128,6 +130,7 @@ html.embed #view{height:clamp(460px,calc(var(--host-vh,900px) * .74),900px);back
       <canvas id="view" aria-label="Rotatable 3D model of the case with fans and airflow. Drag to orbit, scroll to zoom, click a fan to select its group."></canvas>
       <div class="labels" id="labels" hidden></div>
       <div class="tip" id="tip" hidden></div>
+      <div class="stage-hint" id="stage-hint">Drag to rotate · click, then scroll to zoom</div>
     </section>
 
     <aside class="side" aria-label="Fans">
