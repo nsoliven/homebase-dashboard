@@ -654,7 +654,7 @@ document.getElementById('tog-tint').onclick=e=>{tintOn=!tintOn;e.currentTarget.s
 /* ---------- camera, layers, panels ---------- */
 const VIEWS={iso:[-7.52,5.4,9.28],front:[0,3.0,12.2],right:[11.4,3.2,1.9],back:[0.35,3.2,-12.2],gpu:[-7.2,4.6,2.6],top:[0.01,15,0.6]};
 // a tall, narrow stage (phones) needs the camera further out to fit the whole case
-function setView(k,quiet){if(!quiet)touched();controls.minDistance=3.5;if(cam.fov!==34){cam.fov=34;cam.updateProjectionMatrix()}controls.target.set(0,3.0,0);const r=canvas.getBoundingClientRect(),far=k==='top'?1:Math.max(1,Math.min(1.7,1.15/Math.max(0.4,r.width/Math.max(1,r.height))));const v=VIEWS[k];cam.position.set(v[0]*far,3+(v[1]-3)*far,v[2]*far);controls.update();Object.keys(VIEWS).forEach(v=>document.getElementById('cam-'+v).setAttribute('aria-pressed',v===k))}
+function setView(k,quiet){tween=null;inspecting=false;if(!quiet)touched();controls.minDistance=3.5;if(cam.fov!==34){cam.fov=34;cam.updateProjectionMatrix()}controls.target.set(0,3.0,0);const r=canvas.getBoundingClientRect(),far=k==='top'?1:Math.max(1,Math.min(1.7,1.15/Math.max(0.4,r.width/Math.max(1,r.height))));const v=VIEWS[k];cam.position.set(v[0]*far,3+(v[1]-3)*far,v[2]*far);controls.update();Object.keys(VIEWS).forEach(v=>document.getElementById('cam-'+v).setAttribute('aria-pressed',v===k))}
 Object.keys(VIEWS).forEach(k=>document.getElementById('cam-'+k).onclick=()=>setView(k));
 /* ---------- cinematic idle: a product-demo tour ----------
    After 5 s without input the camera runs a loop of eased shots (orbits, dollies, cranes and close-ups),
@@ -678,8 +678,36 @@ function startCine(now){cine.on=true;cine.t0=now;cine.from={pos:cam.position.toA
 function stopCine(){if(!cine.on)return;cine.on=false;capEl.classList.remove('show');
   // keep the camera where the tour left it; allow the close distance it was at
   controls.minDistance=Math.min(3.5,cam.position.distanceTo(controls.target));controls.update()}
+/* click-to-inspect: glide the camera to a close framing of the item and orbit around it */
+const FOCUS={
+  rad:{tgt:[RAD.x,RAD.y,RAD.z],pos:[-2.6,3.5,7.4]},
+  top:{tgt:[0,H-0.45,0.2],pos:[0.4,9.4,3.0]},
+  rear:{tgt:[0,4.4,-D/2],pos:[0.8,5.0,-8.6]},
+  floor:{tgt:[0,1.0,0.3],pos:[0,3.5,4.6]},
+  pump:{tgt:[PUMP.x,PUMP.y,BZ+0.5],pos:[0.7,4.9,3.7]},
+  cpu:{tgt:[PUMP.x,PUMP.y,BZ+0.5],pos:[0.7,4.9,3.7]},
+  gpu:{tgt:[GPU.x-0.3,GPU.y,BZ+0.55],pos:[-4.4,4.5,0.9]},
+};
+let tween=null,inspecting=false;   // while inspecting an item the idle tour stays off, until a view preset
+function focusOn(k){
+  const f=FOCUS[k];if(!f)return;touched();stopCine();inspecting=true;
+  const r=canvas.getBoundingClientRect(),far=Math.max(1,Math.min(1.7,1.15/Math.max(0.4,r.width/Math.max(1,r.height))));
+  const pos=f.pos.map((v,i)=>f.tgt[i]+(v-f.tgt[i])*far);
+  tween={t0:performance.now()/1000,dur:1.1,fromPos:cam.position.toArray(),fromTgt:controls.target.toArray(),fromFov:cam.fov,pos,tgt:f.tgt};
+  controls.minDistance=Math.min(3.5,Math.hypot(pos[0]-f.tgt[0],pos[1]-f.tgt[1],pos[2]-f.tgt[2])*0.5);
+  Object.keys(VIEWS).forEach(v=>document.getElementById('cam-'+v).setAttribute('aria-pressed','false'));
+}
+function runTween(nowMs){
+  if(!tween)return false;touched();
+  const k=Math.min(1,(nowMs/1000-tween.t0)/tween.dur),e=ease(k);
+  cam.position.set(...lerp3(tween.fromPos,tween.pos,e));controls.target.set(...lerp3(tween.fromTgt,tween.tgt,e));
+  const fov=tween.fromFov+(32-tween.fromFov)*e;if(Math.abs(cam.fov-fov)>0.01){cam.fov=fov;cam.updateProjectionMatrix()}
+  cam.lookAt(controls.target);
+  if(k>=1){tween=null;controls.update()}
+  return true;
+}
 function directShot(nowMs){
-  const idle=!reduce&&nowMs-lastInput>5000&&!document.hidden;
+  const idle=!reduce&&!inspecting&&nowMs-lastInput>5000&&!document.hidden;
   if(!idle){stopCine();return false}
   const now=nowMs/1000;if(!cine.on)startCine(now);
   const sh=SHOTS[cine.i],el=now-cine.t0;
@@ -726,7 +754,7 @@ const PARTS={gpu:['GeForce RTX 3070','live GPU view'],cpu:['Ryzen 9 7900X','live
 const partHits=[['gpu',OBST.find(o=>o.id==='gpu').b],['cpu',OBST.find(o=>o.id==='pump').b]].map(([part,b])=>{
   const m=new THREE.Mesh(new THREE.BoxGeometry(b[1]-b[0],b[3]-b[2],b[5]-b[4]),new THREE.MeshBasicMaterial({visible:false}));
   m.position.set((b[0]+b[1])/2,(b[2]+b[3])/2,(b[4]+b[5])/2);m.userData.part=part;scene.add(m);return m});
-function openPart(part){if(EMBED)parent.postMessage({type:'homebase-case-open',part},location.origin);else location.href='/#part/'+part}
+function openPart(part){focusOn(part);if(EMBED)parent.postMessage({type:'homebase-case-open',part},location.origin);else location.href='/#part/'+part}
 const ray=new THREE.Raycaster(),mouse=new THREE.Vector2();const tip=document.getElementById('tip');let hover=null,down=null;
 function pick(e){const r=canvas.getBoundingClientRect();mouse.set(((e.clientX-r.left)/r.width)*2-1,-((e.clientY-r.top)/r.height)*2+1);ray.setFromCamera(mouse,cam);const hit=ray.intersectObjects([...hitboxes,...partHits],false)[0];return hit?hit.object.userData:null}
 canvas.addEventListener('pointermove',e=>{const u=pick(e),f=u?.fan||null,part=u?.part||(f?.group==='gpu'?'gpu':null);hover=f;canvas.style.cursor=u?'pointer':'grab';
@@ -743,7 +771,7 @@ let last=performance.now();
 function frame(now){
   const dt=Math.min(0.05,(now-last)/1000);last=now;const t=now/1000;
   fly(dt);
-  if(!directShot(now))controls.update();
+  if(!runTween(now)&&!directShot(now))controls.update();
   const selGlow=selT<0?0:t-selT<1.2?1:0.55;   // nothing ringed until you pick a group; then a bright flash that settles to a steady ring
   fans.forEach(f=>{
     const g=GROUPS[f.group];const rpm=g.readonly?0:rpmOf(f.group);
@@ -831,7 +859,7 @@ document.querySelectorAll('[data-preset]').forEach(b=>b.onclick=()=>{const g=GRO
 
 /* ---------- side panel ---------- */
 let selT=-1;
-function select(k,quiet){sel=k;const g=GROUPS[k];if(!quiet){selT=performance.now()/1000;touched()}
+function select(k,quiet){sel=k;const g=GROUPS[k];if(!quiet){selT=performance.now()/1000;touched();focusOn(k)}
   document.getElementById('g-name').textContent=g.name;
   document.getElementById('g-meta').textContent=g.readonly?`auto · ${g.temp}°C`:g.actual!=null?`${g.held?'held':'target'} ${g.duty}% · actual ${g.actual}% · ${g.temp}°C`:`${g.duty}% · ${g.temp}°C`;
   document.getElementById('dir-row').hidden=k!=='rear';
