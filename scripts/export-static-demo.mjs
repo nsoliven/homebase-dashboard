@@ -49,10 +49,11 @@ try {
   const icons = new Set(JSON.stringify(integrations).match(/\/api\/(?:apps|branding)\/[a-z0-9-]+\/icon/g) || []);
   for (const path of icons) { const r = await fetch(DEMO + path); if (r.ok) { const file = resolve(out, '.' + path); mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, Buffer.from(await r.arrayBuffer())); } }
   writeFileSync(resolve(api, 'manifest.json'), JSON.stringify({ exportedAt: Date.now(), responses: saved.size }));
+  // only the exported icons are images; any other /api path falls back to the app
   writeFileSync(resolve(out, '_headers'), [
     '/*', '  X-Content-Type-Options: nosniff', '  Referrer-Policy: same-origin', '  X-Frame-Options: SAMEORIGIN',
     "  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self'; form-action 'self'",
-    '/api/apps/:id/icon', '  Content-Type: image/svg+xml', '/api/branding/:id/icon', '  Content-Type: image/svg+xml',   // only the exported icons are images; any other /api path falls back to the app '/demo-api/*', '  Cache-Control: no-cache', ''].join('\n'));
+    '/api/apps/:id/icon', '  Content-Type: image/svg+xml', '/api/branding/:id/icon', '  Content-Type: image/svg+xml', '/demo-api/*', '  Cache-Control: no-cache', ''].join('\n'));
   const index = resolve(out, 'index.html');
   writeFileSync(index, readFileSync(index, 'utf8').replace('</body>', '<a href="https://github.com/nsoliven/homebase-dashboard" style="position:fixed;bottom:8px;right:14px;padding:5px 9px;border:1px solid #2a303d;border-radius:6px;background:#11141b;color:#a3a9b8;font:11px system-ui;z-index:9999;text-decoration:none">Live demo · sample data</a></body>'));
   console.log(`Exported ${saved.size} sample responses and ${icons.size} icons to dist-demo/.`);
