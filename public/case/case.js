@@ -821,7 +821,15 @@ async function setMode(mode){
 }
 document.getElementById('mode-curves').onclick=()=>setMode('curves');
 document.getElementById('mode-bios').onclick=()=>setMode('bios');
-identifyEl.onclick=async()=>{if(!live.on||!CONTROLLED.includes(sel))return;say(`${GROUPS[sel].name} at 100% for 4 s · everything else stopped…`);try{await api('POST',{pulse:sel});setTimeout(poll,1500)}catch(e){say(`Not changed · ${e.message}`,'bad')}};
+const IDENTIFY_S=4;   // matches the fan service's pulse
+identifyEl.onclick=async()=>{
+  if(!live.on||!CONTROLLED.includes(sel)||identifyEl.classList.contains('running'))return;
+  const g=sel;identifyEl.classList.add('running');identifyEl.disabled=true;identifyEl.textContent='Identifying…';
+  identifyEl.style.setProperty('--dur',IDENTIFY_S+'s');say(`${GROUPS[g].name} at 100% · everything else stopped`);
+  const done=()=>{identifyEl.classList.remove('running');identifyEl.textContent='Identify';identifyEl.disabled=!!(GROUPS[sel].readonly||GROUPS[sel].fixed);say(`${GROUPS[g].name} back on its curve`,'ok');poll()};
+  try{await api('POST',{pulse:g});setTimeout(done,IDENTIFY_S*1000-1500)}   // the reply arrives about 1.5 s into the pulse
+  catch(e){identifyEl.classList.remove('running');identifyEl.textContent='Identify';identifyEl.disabled=false;say(`Not changed · ${e.message}`,'bad')}
+};
 (async()=>{
   try{
     const s=await fetch('/api/session',{credentials:'same-origin'}).then(r=>r.json());

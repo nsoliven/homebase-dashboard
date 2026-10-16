@@ -72,6 +72,9 @@ html.embed #view{height:clamp(460px,calc(var(--host-vh,900px) * .74),900px);back
 .curve svg{display:block;width:100%;height:auto;touch-action:none}
 .curve .pt{cursor:grab}
 .ctl{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.chip.running{position:relative;overflow:hidden;color:var(--fg);border-color:var(--accent);cursor:progress;opacity:1}
+.chip.running::after{content:'';position:absolute;left:0;bottom:0;height:100%;width:0;background:var(--glass);animation:fill var(--dur,4s) linear forwards;pointer-events:none}
+@keyframes fill{to{width:100%}}
 .apply{font-size:12px;color:var(--muted);margin-top:6px}
 .apply.ok{color:var(--ok)}
 .apply.bad{color:var(--bad)}
