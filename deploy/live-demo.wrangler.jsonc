@@ -1,0 +1,9 @@
+// Public live demo at homebase.nevryk.com: static assets only, no Worker code and no backend.
+// Build with `node scripts/export-static-demo.mjs`, then `npx wrangler@4 deploy -c deploy/live-demo.wrangler.jsonc`.
+{
+  "name": "homebase-demo",
+  "compatibility_date": "2026-10-01",
+  "assets": { "directory": "../dist-demo", "not_found_handling": "single-page-application" },
+  "workers_dev": false,
+  "routes": [{ "pattern": "homebase.nevryk.com", "custom_domain": true }]
+}

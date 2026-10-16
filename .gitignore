@@ -4,3 +4,10 @@ dist/
 *.sqlite*
 runtime/
 __pycache__/
+dist-demo
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+!.env.example
