@@ -1,7 +1,7 @@
 /* Homebase case view: a 3D model of prox's Tower 500 with fan curves and airflow (three.js r128, vendored). */
 // ?embed hides the page header so the overview panel can frame it, and reports the page height to the parent
 const EMBED=new URLSearchParams(location.search).has('embed');
-if(EMBED){document.documentElement.classList.add('embed');const post=()=>parent.postMessage({type:'homebase-case-height',height:Math.ceil(document.documentElement.scrollHeight)},location.origin);new ResizeObserver(post).observe(document.body);addEventListener('load',post)}
+if(EMBED){document.documentElement.classList.add('embed');addEventListener('message',e=>{if(e.origin===location.origin&&e.source===parent&&e.data?.type==='homebase-viewport'&&e.data.height>200&&e.data.height<5000)document.documentElement.style.setProperty('--host-vh',Math.round(e.data.height)+'px')});const post=()=>parent.postMessage({type:'homebase-case-height',height:Math.ceil(document.querySelector('.wrap').getBoundingClientRect().height)},location.origin);new ResizeObserver(post).observe(document.querySelector('.wrap')||document.body);addEventListener('load',post)}
 (()=>{
 const css=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -411,6 +411,12 @@ function planRoute(F,i,x,y,z,tx,ty,tz){
 const _a=V(0,0,0),_b=V(0,0,0),_c=V(0,0,0);
 function spawnP(F,i,scatter){
   const si=pickW(SOURCES),s=SOURCES[si];F.src[i]=si;F.sink[i]=pickW(SINKS);
+  if(Math.random()<0.09){   // warm air pushed out of the GPU's fin stack, along its front edge and top end; sparse on purpose
+    const k=i*3,top=Math.random()<0.3,x=GPU.x-0.22+(Math.random()-0.5)*0.4,y=top?GPU.y+GPU.len/2+0.08:GPU.y+(Math.random()-0.5)*GPU.len*0.9,z=top?BZ+0.2+Math.random()*0.8:BZ+GPU.h+0.08;
+    F.pos[k]=x;F.pos[k+1]=y;F.pos[k+2]=z;F.vel[k]=0;F.vel[k+1]=top?0.6:0.25;F.vel[k+2]=top?0.05:0.55;
+    F.stage[i]=1;F.exitT[i]=0;F.tmp[i]=0.6+Math.random()*0.25;F.age[i]=scatter?-Math.random()*7:0;F.seed[i]=Math.random()*100;F.born[i]=1;
+    const sk=SINKS[F.sink[i]];planRoute(F,i,x,y,z,sk.p.x,sk.p.y,sk.p.z);return;
+  }
   let x,y,z;
   if(s.group==='floor'){const side=Math.random(),out=0.25+Math.random()*0.9;y=0.08+Math.random()*0.62;
     if(side<0.5){x=(Math.random()-0.5)*W;z=D/2+out}else{x=(side<0.75?-1:1)*(W/2+out);z=0.05+Math.random()*1.75}}   // front half of the base only, clear of the PSU
@@ -419,6 +425,28 @@ function spawnP(F,i,scatter){
   const k=i*3;F.pos[k]=x;F.pos[k+1]=y;F.pos[k+2]=z;F.stage[i]=0;F.exitT[i]=0;
   const sp=fanSpeed(s.group)*0.5,dl=Math.hypot(s.p.x-x,s.p.y-y,s.p.z-z)||1;F.vel[k]=(s.p.x-x)/dl*sp;F.vel[k+1]=(s.p.y-y)/dl*sp;F.vel[k+2]=(s.p.z-z)/dl*sp;
   F.tmp[i]=Math.random()*0.04;F.age[i]=scatter?-Math.random()*7:0;F.seed[i]=Math.random()*100;F.born[i]=1;F.hasWp[i]=0;
+}
+/* the shell: air only crosses it where there is mesh (side strips, top panel, rear hex, the base); glass and solid panels bounce it back */
+const HEX_HW=(W-0.56)/2,TOP_HX=(W-0.62)/2,TOP_HZ=(W-0.62)*D/W/2;
+function meshAt(axis,side,x,y,z){
+  if(axis===1)return side>0&&Math.abs(x)<TOP_HX&&Math.abs(z)<TOP_HZ;      // top panel; nothing through the floor
+  if(y<BASE)return !(axis===2&&side<0);                                  // base: slots front and sides, solid back
+  if(y>HB)return false;                                                  // hood sides are solid
+  if(axis===0)return side>0?z>D/2-SIDE_MESH:z<-D/2+SIDE_MESH;            // each side is glass except its perforated strip
+  return side<0&&y>1.95&&y<5.1&&Math.abs(x)<HEX_HW;                      // rear hex mesh; the front is all glass
+}
+const inShell=(x,y,z)=>Math.abs(x)<W/2&&Math.abs(z)<D/2&&y>0&&y<H;
+function contain(F,k,px,py,pz){
+  const x=F.pos[k],y=F.pos[k+1],z=F.pos[k+2],was=inShell(px,py,pz);if(was===inShell(x,y,z))return;
+  const ox=was?x:px,oy=was?y:py,oz=was?z:pz;let axis,side,t;
+  if(Math.abs(ox)>=W/2){axis=0;side=Math.sign(ox);t=(side*W/2-px)/((x-px)||1e-6)}
+  else if(Math.abs(oz)>=D/2){axis=2;side=Math.sign(oz);t=(side*D/2-pz)/((z-pz)||1e-6)}
+  else{axis=1;side=oy>=H?1:-1;t=((side>0?H:0)-py)/((y-py)||1e-6)}
+  t=Math.max(0,Math.min(1,t));if(meshAt(axis,side,px+(x-px)*t,py+(y-py)*t,pz+(z-pz)*t))return;
+  const back=was?-1:1,e=0.02;
+  if(axis===0){F.pos[k]=side*(W/2+back*e);F.vel[k]*=-0.3}
+  else if(axis===2){F.pos[k+2]=side*(D/2+back*e);F.vel[k+2]*=-0.3}
+  else{F.pos[k+1]=(side>0?H:0)+side*back*e;F.vel[k+1]*=-0.3}
 }
 function heatAt(x,y,z){
   const gpuP=Math.max(0,(GROUPS.gpu.temp-28)/50),cpuP=Math.max(0,(GROUPS.rad.temp-35)/60);let h=0.012;
@@ -430,7 +458,7 @@ function stepFlow(F,dt){
   const radHeat=0.3+0.65*Math.max(0,Math.min(1,(GROUPS.rad.temp-35)/45)),nz=F.noise,t=simT;
   for(let i=0;i<F.n;i++){
     F.age[i]+=dt;if(F.age[i]<0)continue;
-    const k=i*3;let x=F.pos[k],y=F.pos[k+1],z=F.pos[k+2],vx=F.vel[k],vy=F.vel[k+1],vz=F.vel[k+2];
+    const k=i*3;let x=F.pos[k],y=F.pos[k+1],z=F.pos[k+2],vx=F.vel[k],vy=F.vel[k+1],vz=F.vel[k+2];const px=x,py=y,pz=z;
     const s=SINKS[F.sink[i]],src=SOURCES[F.src[i]];if(!s||!src){spawnP(F,i);continue}
     const sd=F.seed[i];
     if(F.stage[i]===0){            // drawn in toward its intake fan
@@ -450,16 +478,18 @@ function stepFlow(F,dt){
       vx+=Math.sin(y*1.9+t*0.9+sd)*0.6*nz*dt;vz+=Math.cos(x*1.7-t*0.7+sd*1.3)*0.6*nz*dt;vy+=Math.sin(z*2.1+t*1.1+sd*0.7)*0.28*nz*dt;
       if(y>BASE&&y<HB&&Math.abs(x)<W/2&&Math.abs(z)<D/2){F.tmp[i]=Math.min(1,F.tmp[i]+heatAt(x,y,z)*dt*1.6);
         const lim=W/2-0.1;if(Math.abs(x)>lim&&!s.rad){x=Math.sign(x)*lim;vx*=-0.3}if(Math.abs(z)>D/2-0.1&&s.n.z===0){z=Math.sign(z)*(D/2-0.1);vz*=-0.3}}
-      if(sDist<s.r*0.9){F.stage[i]=2;F.exitT[i]=0;if(s.rad)F.tmp[i]=Math.max(F.tmp[i],radHeat*(0.85+Math.random()*0.3))}
+      if(sDist<s.r*0.9){F.stage[i]=2;F.exitT[i]=0;F.tmp[i]=Math.max(F.tmp[i],s.rad?Math.max(0.55,radHeat)*(0.85+Math.random()*0.3):0.4+Math.random()*0.2)}   // exhaust always leaves warmer
     }else{                          // pushed out of the exhaust and spreading
       F.exitT[i]+=dt;const sp=fanSpeed(s.group)*1.35,e=Math.min(1,2.5*dt);
       vx+=(s.n.x*sp-vx)*e;vy+=(s.n.y*sp-vy)*e;vz+=(s.n.z*sp-vz)*e;
-      vx+=Math.sin(sd+t*2)*0.9*nz*dt;vz+=Math.cos(sd*1.7+t*1.6)*0.9*nz*dt;vy+=Math.sin(sd*0.5+t*1.3)*0.5*nz*dt;
+      const spread=inShell(x,y,z)?0.15:1;
+      vx+=Math.sin(sd+t*2)*0.9*nz*spread*dt;vz+=Math.cos(sd*1.7+t*1.6)*0.9*nz*spread*dt;vy+=Math.sin(sd*0.5+t*1.3)*0.5*nz*spread*dt;
       if(F.exitT[i]>F.fade){spawnP(F,i);continue}
     }
     x+=vx*dt;y+=vy*dt;z+=vz*dt;
     if(F.age[i]>18){spawnP(F,i);continue}
     F.pos[k]=x;F.pos[k+1]=y;F.pos[k+2]=z;F.vel[k]=vx;F.vel[k+1]=vy;F.vel[k+2]=vz;
+    contain(F,k,px,py,pz);
     if(F.stage[i]===1||(F.stage[i]===2&&!s.rad))pushOut(F,k,F.stage[i]===2&&s.rad);   // slide around solid parts instead of passing through
   }
 }
@@ -583,11 +613,12 @@ document.getElementById('rgb-off').onclick=()=>setRgb(false);document.getElement
 document.getElementById('tog-tint').onclick=e=>{tintOn=!tintOn;e.currentTarget.setAttribute('aria-pressed',tintOn);if(reduce)drawSmoke()};
 
 /* ---------- camera, layers, panels ---------- */
-const VIEWS={iso:[-9.4,6.0,11.6],front:[0,3.0,13.5],right:[13,3.2,2.2],back:[0.4,3.2,-13.5],gpu:[-7.2,4.6,2.6],top:[0.01,15,0.6]};
-function setView(k){cam.position.set(...VIEWS[k]);controls.update();Object.keys(VIEWS).forEach(v=>document.getElementById('cam-'+v).setAttribute('aria-pressed',v===k))}
+const VIEWS={iso:[-7.52,5.4,9.28],front:[0,3.0,12.2],right:[11.4,3.2,1.9],back:[0.35,3.2,-12.2],gpu:[-7.2,4.6,2.6],top:[0.01,15,0.6]};
+// a tall, narrow stage (phones) needs the camera further out to fit the whole case
+function setView(k){const r=canvas.getBoundingClientRect(),far=k==='top'?1:Math.max(1,Math.min(1.7,1.15/Math.max(0.4,r.width/Math.max(1,r.height))));const v=VIEWS[k];cam.position.set(v[0]*far,3+(v[1]-3)*far,v[2]*far);controls.update();Object.keys(VIEWS).forEach(v=>document.getElementById('cam-'+v).setAttribute('aria-pressed',v===k))}
 Object.keys(VIEWS).forEach(k=>document.getElementById('cam-'+k).onclick=()=>setView(k));
 setView('iso');
-let showHeat=true,showLabels=true;
+let showHeat=true,showLabels=false;   // labels off by default: the clean view
 const tog=(id,fn)=>{const b=document.getElementById(id);b.onclick=()=>{const on=b.getAttribute('aria-pressed')!=='true';b.setAttribute('aria-pressed',on);fn(on)}};
 tog('tog-heat',on=>{showHeat=on;glows.forEach(g=>g.visible=on)});
 tog('tog-lbl',on=>{showLabels=on;labelsEl.hidden=!on});
@@ -625,12 +656,13 @@ let last=performance.now();
 function frame(now){
   const dt=Math.min(0.05,(now-last)/1000);last=now;const t=now/1000;
   controls.update();
+  const selGlow=Math.max(0,Math.min(1,1-(t-selT-1.4)/0.8));   // the selection ring flashes, then fades so the view stays clean
   fans.forEach(f=>{
     const g=GROUPS[f.group];const rpm=g.readonly?0:rpmOf(f.group);
     const speed=reduce?0:Math.min(rpm/60,2.2)*Math.PI*2*0.55;   // capped well below the strobe point
     f.phase+=speed*dt*f.dirSign;f.rotor.rotation.z=f.phase;
     const b=Math.min(1,rpm/2400);f.blurMat.opacity=(f.clear?0.05:0.12)+b*(f.clear?0.3:0.45);if(!f.clear)f.bladeMat.opacity=1;
-    f.selMat.opacity=(f.group===sel?0.95:0)+(hover&&hover.group===f.group&&f.group!==sel?0.5:0);
+    f.selMat.opacity=(f.group===sel?0.95*selGlow:0)+(hover&&hover.group===f.group&&f.group!==sel?0.5:0);
   });
   if(showHeat){const cpuP=Math.max(0,(GROUPS.rad.temp-35)/45),gpuP=Math.max(0,(GROUPS.gpu.temp-28)/50),pulse=reduce?1:1+Math.sin(t*1.1)*0.06,k=true?0.9:0.65;
     radGlow.material.opacity=(0.12+cpuP*0.4)*k;radGlow.scale.setScalar(2.9*pulse);gpuGlow.material.opacity=(0.08+gpuP*0.45)*k;cpuGlow.material.opacity=(0.06+cpuP*0.25)*k}
@@ -653,14 +685,15 @@ scene.traverse(o=>{
   const m=o.material;o.receiveShadow=!(m.transparent&&m.opacity<0.5);
   o.castShadow=!inCase&&!(m.transparent&&m.opacity<1)&&m.depthWrite!==false;
 });
-resetAir();setAir('both');setRgb(false);
+resetAir();setAir('both');setRgb(true);   // default: RGB on in blue, smoke and streaks
 requestAnimationFrame(frame);
 
-/* legend and group switcher */
-document.getElementById('legend').innerHTML=Object.entries(GROUPS).filter(([k])=>k!=='pump').map(([k,g])=>`<button data-g="${k}"><i style="background:${g.color}"></i>${g.name}</button>`).join('')+'<span class="air"><span></span>air, cool to warm</span>';
-document.querySelectorAll('#legend button').forEach(b=>b.onclick=()=>select(b.dataset.g));
-document.getElementById('gsw').innerHTML=Object.entries(GROUPS).map(([k,g])=>`<button role="tab" data-g="${k}" aria-selected="false"><i style="background:${g.color}"></i>${g.name}</button>`).join('');
-document.querySelectorAll('#gsw button').forEach(b=>b.onclick=()=>select(b.dataset.g));
+/* fan group list: one row per group; details live in the hover title */
+const groupsEl=document.getElementById('groups');
+const rowTitle=k=>{const g=GROUPS[k],hs=HEADERS.filter(h=>h.group===k).map(h=>h.id);return [g.count,g.dir,g.readonly?'Set by the NVIDIA driver':hs.length?'Header '+hs.join(' + '):''].filter(Boolean).join(' · ')};
+groupsEl.innerHTML=Object.entries(GROUPS).map(([k,g])=>`<button class="grp" role="option" data-g="${k}" aria-selected="false"><i style="background:${g.color}"></i><span class="name">${g.name}</span><span class="rpm">${g.readonly?'auto':rpmOf(k).toLocaleString()}</span><span class="duty" aria-hidden="true"><b style="width:${g.duty}%;background:${g.color}"></b></span></button>`).join('');
+const groupEls=[...groupsEl.querySelectorAll('.grp')];
+groupEls.forEach(b=>b.onclick=()=>select(b.dataset.g));
 
 /* ---------- airflow balance ---------- */
 function balance(){
@@ -673,7 +706,7 @@ function balance(){
   p.className='tag '+(ratio>1.05?'good':ratio<0.95?'bad':'');
   p.textContent=ratio>1.05?'Positive · less dust':ratio<0.95?'Negative · dust gets in':'Balanced';
 }
-function setRear(flow){GROUPS.rear.flow=flow;GROUPS.rear.dir=rearDir();document.getElementById('dir-in').setAttribute('aria-pressed',flow==='in');document.getElementById('dir-out').setAttribute('aria-pressed',flow==='out');resetAir();balance();if(sel==='rear')document.getElementById('g-dir').textContent=GROUPS.rear.dir}
+function setRear(flow){GROUPS.rear.flow=flow;GROUPS.rear.dir=rearDir();document.getElementById('dir-in').setAttribute('aria-pressed',flow==='in');document.getElementById('dir-out').setAttribute('aria-pressed',flow==='out');resetAir();balance();select(sel)}
 document.getElementById('dir-in').onclick=()=>setRear('in');document.getElementById('dir-out').onclick=()=>setRear('out');
 
 /* ---------- curve editor ---------- */
@@ -685,7 +718,7 @@ function drawCurve(){
   let s=`<rect x="${X0}" y="${Y1}" width="${X1-X0}" height="${Y0-Y1}" fill="var(--glass)" rx="6"></rect>`;
   for(let t=30;t<=100;t+=10)s+=`<line x1="${sx(t)}" x2="${sx(t)}" y1="${Y1}" y2="${Y0}" stroke="var(--line)" stroke-width="1"></line><text x="${sx(t)}" y="${Y0+16}" fill="var(--muted)" font-size="10" text-anchor="middle" font-family="JetBrains Mono, monospace">${t}°</text>`;
   for(let d=0;d<=100;d+=25)s+=`<line x1="${X0}" x2="${X1}" y1="${sy(d)}" y2="${sy(d)}" stroke="var(--line)" stroke-width="1"></line><text x="${X0-6}" y="${sy(d)+3}" fill="var(--muted)" font-size="10" text-anchor="end" font-family="JetBrains Mono, monospace">${d}%</text>`;
-  s+=`<rect x="${X0}" y="${Y1}" width="${X1-X0}" height="${sy(60)-Y1}" fill="var(--warm)" opacity=".07"></rect><text x="${X1-4}" y="${sy(60)-4}" fill="var(--warm)" font-size="10" text-anchor="end" font-family="JetBrains Mono, monospace">above 60%: short bursts only</text>`;
+  s+=`<rect x="${X0}" y="${Y1}" width="${X1-X0}" height="${sy(60)-Y1}" fill="var(--warm)" opacity=".07"></rect><text x="${X0+4}" y="${sy(60)-4}" fill="var(--warm)" font-size="10" text-anchor="start" font-family="JetBrains Mono, monospace">above 60%: short bursts only</text>`;
   const poly=[[TMIN,pts[0][1]],...pts,[TMAX,pts[pts.length-1][1]]];
   s+=`<path d="M${poly.map(p=>sx(p[0])+','+sy(p[1])).join(' L')} L${X1},${Y0} L${X0},${Y0} Z" fill="${g.color}" opacity=".12"></path>`;
   s+=`<polyline points="${poly.map(p=>sx(p[0])+','+sy(p[1])).join(' ')}" fill="none" stroke="${g.color}" stroke-width="2.5" stroke-linejoin="round"></polyline>`;
@@ -705,28 +738,16 @@ svg.addEventListener('pointerup',()=>drag=null);
 svg.addEventListener('keydown',e=>{const c=e.target.closest('.pt');if(!c)return;const i=+c.dataset.i,p=GROUPS[sel].curve[i];const k={ArrowUp:[0,2],ArrowDown:[0,-2],ArrowLeft:[-1,0],ArrowRight:[1,0]}[e.key];if(!k)return;e.preventDefault();p[0]+=k[0];p[1]=Math.max(0,Math.min(100,p[1]+k[1]));drawCurve();svg.querySelector(`.pt[data-i="${i}"]`)?.focus()});
 document.querySelectorAll('[data-preset]').forEach(b=>b.onclick=()=>{const g=GROUPS[sel];if(g.readonly||g.fixed)return;const p=b.dataset.preset;g.curve=(p==='bios'?(sel==='rad'?[[50,20],[80,45],[95,60],[100,100]]:[[30,25],[50,35],[65,50],[80,60]]):PRESETS[p]).map(x=>[...x]);document.querySelectorAll('[data-preset]').forEach(c=>c.setAttribute('aria-pressed',c===b));drawCurve()});
 
-/* ---------- side panel + headers ---------- */
-const SRC_LABEL={tctl:'CPU Tctl',system:'System',gpu:'GPU core',max:'Hottest'};
-function select(k){sel=k;const g=GROUPS[k];
-  const hs=HEADERS.filter(h=>h.group===k).map(h=>h.id);
-  document.getElementById('g-header').textContent=g.readonly?'NVIDIA driver':(hs.length?'Header '+hs.join(' + '):'Not mapped yet');
-  document.getElementById('g-name').innerHTML=`<span class="swatch" style="background:${g.color}"></span>${g.name} <span class="lbl" style="font-weight:400">· ${g.count}</span>`;
-  document.getElementById('g-dir').textContent=g.dir;
-  document.getElementById('s-rpm').innerHTML=(g.readonly?0:rpmOf(k)).toLocaleString()+'<small>rpm</small>';
-  document.getElementById('s-duty').innerHTML=g.duty+'<small>%</small>';
-  const db=document.getElementById('s-dbar');db.style.width=g.duty+'%';db.style.background=g.color;
+/* ---------- side panel ---------- */
+let selT=-1e9;
+function select(k,quiet){sel=k;const g=GROUPS[k];if(!quiet)selT=performance.now()/1000;
+  document.getElementById('g-name').textContent=g.name;
+  document.getElementById('g-meta').textContent=g.readonly?`auto · ${g.temp}°C`:`${g.duty}% · ${g.temp}°C`;
   document.getElementById('dir-row').hidden=k!=='rear';
-  document.querySelectorAll('#gsw button').forEach(b=>b.setAttribute('aria-selected',b.dataset.g===k));
+  groupEls.forEach(b=>{b.setAttribute('aria-selected',b.dataset.g===k);b.title=rowTitle(b.dataset.g)});
   labelEls.forEach(b=>b.setAttribute('aria-pressed',b.dataset.g===k));
-  document.getElementById('s-src-k').textContent=SRC_LABEL[g.src];
-  document.getElementById('s-temp').innerHTML=g.temp+'<small>°C</small>';
-  const src=document.getElementById('src');src.value=g.src;src.disabled=!!(g.readonly||g.fixed);
   document.querySelectorAll('[data-preset]').forEach(b=>{b.disabled=!!(g.readonly||g.fixed)});
-  document.querySelectorAll('.hdr').forEach(h=>h.setAttribute('aria-pressed',HEADERS.find(x=>x.id===h.dataset.id).group===k));
   drawCurve();
 }
-document.getElementById('src').onchange=e=>{GROUPS[sel].src=e.target.value;select(sel)};
-document.getElementById('hdrs').innerHTML=HEADERS.map(h=>{const g=h.group?GROUPS[h.group]:null;return `<button class="hdr" data-id="${h.id}" aria-pressed="false"><span class="row"><span class="name">${h.id}</span>${!g?'<span class="tag off">empty</span>':h.guess?'<span class="tag guess">guess</span>':'<span class="tag">confirmed</span>'}</span><span class="rpm">${h.rpm.toLocaleString()} <small class="lbl">rpm</small></span><span class="map">${g?`<span class="swatch" style="background:${g.color};width:9px;height:9px"></span>${g.name}`:'Nothing connected'}</span></button>`}).join('');
-document.querySelectorAll('.hdr').forEach(b=>b.onclick=()=>{const h=HEADERS.find(x=>x.id===b.dataset.id);if(h.group)select(h.group)});
-balance();select('rad');
+balance();select('rad',true);
 })();

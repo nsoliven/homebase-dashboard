@@ -2,7 +2,7 @@
 
 <p align="center"><a href="https://homebase.nevryk.com"><b>▶ Live demo: homebase.nevryk.com</b></a><br><sub>The real interface with sample data, served as a static site. No backend, no real readings.</sub></p>
 
-<p align="center"><img src="docs/screenshots/case-rgb.gif" alt="3D model of prox's Thermaltake The Tower 500 cycling RGB colors while smoke and streaks show the airflow" width="480"></p>
+<p align="center"><img src="docs/screenshots/case-rgb.gif" alt="3D model of prox's Thermaltake The Tower 500 cycling RGB colors while smoke and streaks show the airflow" width="600"></p>
 
 <p align="center"><b>prox, live on the overview.</b> A 3D model of the Thermaltake The Tower 500 with the real parts inside, its fans, airflow you can see and the fan curves.<br><a href="docs/screenshots/case-demo.mp4">Watch the 76-second demo</a></p>
 
@@ -39,10 +39,10 @@ The overview opens on a model of prox's case: the Thermaltake The Tower 500 (Sno
 
 The **Cooling** page shows only the case. Open it full screen at `/case/`.
 
-- **Airflow:** smoke, motion-blurred streaks, or both. The air flows in at the intakes, around the board and parts, and out of the exhausts. **Temp color** shades the air from cool to warm as it passes the GPU and the radiator.
-- **RGB:** off is a studio view with soft shadows. On dims the room and lights the fans, the pump, the RAM and the GPU logo in one color you pick. There is no rainbow mode.
-- **Fan control design:** pick a fan group to see its header, the sensor it follows, its curve, and the airflow balance. The rear fans can be switched between intake and exhaust.
-- **Views:** 3/4, Front, Radiator, Back, GPU and Top; Case, X-ray or Bare; heat glow and labels.
+- **Airflow:** smoke, motion-blurred streaks, or both. Air only crosses the case where it has mesh (the side strips, the top, the rear hex and the base), never through the glass. It flows around the board and parts, and the GPU gives off a few warm puffs. **Temp color** shades the air from cool to warm, and every exhaust leaves warm.
+- **RGB:** on by default, in blue: the room goes dark and the fans, pump, RAM and GPU logo light in one color you pick. There is no rainbow mode. Off is a studio view with soft shadows.
+- **Fans:** one list with each group's RPM and duty. Hover a row for details, or click it to show its curve. The rear fans switch between intake and exhaust, and the airflow balance shows intake against exhaust.
+- **Views:** 3/4, Front, Radiator, Back, GPU and Top; Case, X-ray or Bare; a heat glow; optional labels. Everything is always dark, and the controls sit above the model, not on it.
 
 Fan readings are **modeled** from 2026-10-15 values until fan telemetry is connected, and the panel says so. Nothing here changes the real fans. three.js r128 is bundled under `public/case/vendor`, so the page runs under `script-src 'self'`. Only `/case/` may be framed, and only by Homebase itself.
 
