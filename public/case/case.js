@@ -9,19 +9,19 @@ const isDark=()=>{const t=document.documentElement.dataset.theme;return t?t==='d
 const small=matchMedia('(max-width: 640px)').matches;
 
 /* Readings from prox at 19:00 on 2026-10-15. */
-const HEADERS=[   // BIOS names; each case pair shares one header through a splitter. SYS1 and SYS6 are empty.
+const HEADERS=[   // BIOS names, confirmed by the user 2026-10-15. System Fan 1 and 6 are empty.
  {id:'CPU Fan 1',rpm:1118,group:'rad'},
  {id:'Pump Sys Fan 1',rpm:3200,group:'pump'},
- {id:'System Fan 2',rpm:813,group:'rear'},
+ {id:'System Fan 2',rpm:813,group:'top'},
  {id:'System Fan 3',rpm:1101,group:'rear'},
- {id:'System Fan 4',rpm:1114,group:'top'},
+ {id:'System Fan 4',rpm:1114,group:'rear'},
  {id:'System Fan 5',rpm:852,group:'floor'},
 ];
 const GROUPS={
  rad:{name:'Radiator',count:'3 × 120 mm',dir:'Exhaust · right grille',color:'#4a5fd6',src:'tctl',temp:61,duty:38,curve:[[50,20],[80,45],[95,60],[100,100]]},
  top:{name:'Top',count:'2 × 120 mm',dir:'Exhaust · up',color:'#e0832f',src:'system',temp:39,duty:42,curve:[[50,40],[60,55],[65,70],[68,100]]},
  floor:{name:'Floor intake',count:'2 × 140 mm',dir:'Intake · from below',color:'#2f9a62',src:'system',temp:39,duty:32,curve:[[50,40],[60,55],[65,80],[68,100]]},
- rear:{name:'Rear',count:'2 × 120 mm',dir:'',flow:'in',color:'#9b59c9',src:'system',temp:39,duty:40,curve:[[50,40],[60,55],[65,70],[68,100]]},
+ rear:{name:'Back',count:'2 × 120 mm',dir:'',flow:'in',color:'#9b59c9',src:'system',temp:39,duty:40,curve:[[50,40],[60,55],[65,70],[68,100]]},
  pump:{name:'AIO pump',count:'Galahad II',dir:'Coolant loop',color:'#3f8fd8',src:'tctl',temp:61,duty:100,curve:[[30,100],[100,100]],fixed:true},
  gpu:{name:'GPU fans',count:'3 × 80 mm · driver',dir:'Read-only',color:'#8d95a7',src:'gpu',temp:41,duty:0,curve:[[50,0],[60,30],[75,55],[85,80]],readonly:true},
 };
@@ -852,7 +852,7 @@ async function setMode(mode){
 document.getElementById('mode-curves').onclick=()=>setMode('curves');
 document.getElementById('mode-bios').onclick=()=>setMode('bios');
 /* Direct mode: one slider per header (never the pump); letting go applies it at once */
-const HEADER_NAMES={1:['CPU Fan 1','Radiator'],3:['System Fan 1','empty'],4:['System Fan 2','Rear'],5:['System Fan 3','Rear'],6:['System Fan 4','Top'],7:['System Fan 5','Bottom intake'],8:['System Fan 6','empty']};
+const HEADER_NAMES={1:['CPU Fan 1','Radiator'],3:['System Fan 1','empty'],4:['System Fan 2','Top'],5:['System Fan 3','Back'],6:['System Fan 4','Back'],7:['System Fan 5','Bottom intake'],8:['System Fan 6','empty']};
 const directList=document.getElementById('direct-list'),directState=document.getElementById('direct-state');
 directList.innerHTML=Object.entries(HEADER_NAMES).map(([ch,[n,role]])=>`<div class="dir-row" data-ch="${ch}"><span class="dn">${n}<small>${role}</small></span><span class="dv">–</span><input type="range" min="0" max="100" step="5" value="40" aria-label="${n} speed"><span class="dr">–</span></div>`).join('');
 const dirRows=[...directList.querySelectorAll('.dir-row')];
