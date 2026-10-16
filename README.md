@@ -41,6 +41,7 @@ The **Cooling** page shows only the case. Open it full screen at `/case/`.
 
 - **Airflow:** smoke, motion-blurred streaks, or both. Air only crosses the case where it has mesh (the side strips, the top, the rear hex and the base), never through the glass. It flows around the board and parts, and the GPU gives off a few warm puffs. **Temp color** shades the air from cool to warm, and every exhaust leaves warm.
 - **RGB:** on by default, in blue: the room goes dark and the fans, pump, RAM and GPU logo light in one color you pick. There is no rainbow mode. Off is a studio view with soft shadows.
+- **Parts:** click the GPU or the CPU in the model to pop up its live view: the card or the chip with every reading, each linking to its history.
 - **Fans:** one list with each group's RPM and duty. Hover a row for details, or click it to show its curve. The rear fans switch between intake and exhaust, and the airflow balance shows intake against exhaust.
 - **Views:** 3/4, Front, Radiator, Back, GPU and Top; Case, X-ray or Bare; a heat glow; optional labels. Everything is always dark, and the controls sit above the model, not on it.
 
@@ -51,6 +52,8 @@ Fan readings are **modeled** from 2026-10-15 values until fan telemetry is conne
 | ![Case view with RGB off: studio lighting and soft shadows](docs/screenshots/case-studio.png) | ![Case view with RGB on in blue](docs/screenshots/case-rgb-blue.png) |
 | **X-ray with airflow** | **Cooling page** |
 | ![X-ray mode with smoke and streaks colored by temperature](docs/screenshots/case-xray-airflow.png) | ![The Cooling page with the case view](docs/screenshots/case-cooling-page.png) |
+| **Click the GPU** | **Click the CPU** |
+| ![GPU live view opened from the 3D model](docs/screenshots/case-gpu-popup.png) | ![CPU live view opened from the 3D model](docs/screenshots/case-cpu-popup.png) |
 
 ## Live demo
 

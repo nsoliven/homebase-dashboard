@@ -23,10 +23,10 @@
 .showcase-heading h3 { font-size: 22px; font-weight: 500; letter-spacing: -.7px; margin-top: 6px; }
 .showcase-observed { font-size: 10px; color: var(--muted); }
 .heat-legend { display: inline-flex; align-items: center; gap: 6px; font: 9px var(--mono); color: var(--muted); }
-.heat-legend i { width: 72px; height: 6px; border-radius: 3px; background: linear-gradient(in oklab 90deg, #e6eaf7, #2c49b8); }
+.heat-legend i { width: 72px; height: 6px; border-radius: 3px; background: linear-gradient(in oklab 90deg, #1c2232, #6a85ff); }
 
 .compute-stage { --leaders: 0; position: relative; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-.stage-art { order: -1; grid-column: 1 / -1; min-width: 0; padding: 8px 0 4px; background: radial-gradient(ellipse 60% 55% at 50% 55%, #f5f6fa 0%, transparent 72%); }
+.stage-art { order: -1; grid-column: 1 / -1; min-width: 0; padding: 8px 0 4px; background: radial-gradient(ellipse 60% 55% at 50% 55%, #7d8cff12 0%, transparent 72%); }
 .callout-column { display: contents; }
 .callout { min-width: 0; border: 1px solid var(--line); border-radius: 12px; padding: 11px 12px; background: var(--surface); }
 .callout-head { display: flex; align-items: center; gap: 7px; width: 100%; padding: 2px 0; text-align: inherit; border-radius: 6px; }
@@ -59,7 +59,7 @@
 .gpu-art { max-width: 640px; }
 .cpu-art { max-width: 380px; }
 .rotor { transform-box: fill-box; transform-origin: center; will-change: transform; }
-.art-shadow { fill: #1d2435; opacity: .09; }
+.art-shadow { fill: #000; opacity: .45; }
 .art-glow { transition: fill 1.2s ease, opacity 1.2s ease; }
 .gpu-outline { stroke: #b4b8c2; stroke-width: 1; }
 .gpu-vent { fill: #9ea3ae; }
@@ -303,7 +303,7 @@
 @keyframes hb-sheet-up { from { transform: translateY(24px); opacity: .4; } }
 
 /* Case view: the 3D Tower 500 model framed from /case/, always dark */
-.case-panel { grid-column: 1 / -1; padding: 14px 16px 16px; background: #0b0e15; border-color: #1c2230; color: #e8ebf2; }
+.case-panel { grid-column: 1 / -1; padding: 14px 16px 16px; }
 .case-panel .panel-heading { margin-bottom: 12px; }
 .case-panel .panel-heading h2, .case-panel .panel-heading svg { color: #e8ebf2; }
 .case-actions { display: flex; align-items: center; gap: 12px; min-width: 0; }

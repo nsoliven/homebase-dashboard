@@ -1,30 +1,31 @@
-/* Shared semantic tokens. Each study changes composition as well as color. */
+/* Shared semantic tokens. Homebase is always dark. */
 :root {
+  color-scheme: dark;
   font-family: 'Inter Variable', Inter, ui-sans-serif, system-ui, sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
-  --canvas: #f3f3f5;
-  --surface: #ffffff;
-  --surface-raised: #f7f7f9;
-  --surface-hover: #f0f1f5;
-  --sidebar: #f3f3f5;
-  --ink: #242429;
-  --body: #696970;
-  --muted: #8b8b95;
-  --line: #e9e9ee;
-  --line-strong: #ddddE5;
-  --accent: #4568d5;
-  --accent-soft: #edf1ff;
-  --primary: #242429;
-  --on-primary: #ffffff;
-  --green: #23805b;
-  --green-soft: #edf7f1;
-  --amber: #ac781f;
-  --amber-soft: #fbf4e5;
-  --red: #c9534d;
-  --violet: #8371ad;
-  --chart-secondary: #a5afd0;
+  --canvas: #090b10;
+  --surface: #11141b;
+  --surface-raised: #161a23;
+  --surface-hover: #1b202b;
+  --sidebar: #090b10;
+  --ink: #e8eaf0;
+  --body: #a3a9b8;
+  --muted: #7a8192;
+  --line: #1f2430;
+  --line-strong: #2a303d;
+  --accent: #7d8cff;
+  --accent-soft: #7d8cff1f;
+  --primary: #e8eaf0;
+  --on-primary: #0b0d12;
+  --green: #4cc38a;
+  --green-soft: #4cc38a1c;
+  --amber: #e3ad4f;
+  --amber-soft: #e3ad4f1c;
+  --red: #ff6b5c;
+  --violet: #a895e0;
+  --chart-secondary: #4d5a85;
   --radius: 16px;
   --gap: 18px;
   --mono: 'JetBrains Mono', ui-monospace, monospace;
@@ -40,7 +41,7 @@ button { background: none; border: 0; }
 button:disabled { opacity: .55; cursor: default; }
 button, input, select { outline-offset: 4px; }
 :focus-visible { outline: 2px solid var(--accent); }
-button:hover:not(:disabled) { filter: brightness(.98); }
+button:hover:not(:disabled) { filter: brightness(1.08); }
 svg { flex-shrink: 0; stroke-width: 1.65; }
 h1, h2, h3, p { margin: 0; }
 strong { font-weight: 550; }
@@ -56,7 +57,7 @@ button, span, strong { font-variant-numeric: tabular-nums; }
 .design-options { display: flex; gap: 4px; padding: 4px; border: 1px solid var(--line-strong); border-radius: 9px; margin-left: auto; }
 .design-options button { padding: 6px 12px; display: flex; align-items: center; gap: 7px; color: var(--body); font-size: 12px; border-radius: 5px; border: 1px solid transparent; }
 .design-options button.active { background: var(--surface); border-color: var(--line-strong); color: var(--ink); }
-.design-options button i { width: 8px; height: 8px; border-radius: 50%; border: 1px solid #00000012; }
+.design-options button i { width: 8px; height: 8px; border-radius: 50%; border: 1px solid #ffffff1a; }
 .design-number { font-family: var(--mono); font-size: 11px; opacity: .5; }
 .design-shortcut { color: var(--muted); font-size: 12px; }
 kbd { font-family: inherit; font-size: 12px; background: var(--surface-raised); border: 1px solid var(--line-strong); border-radius: 4px; padding: 2px 4px; }
@@ -122,7 +123,7 @@ h1 { font-size: clamp(25px, 2.35vw, 38px); font-weight: 500; letter-spacing: -1.
 .primary-button, .secondary-button { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 36px; padding: 10px 13px; background: var(--primary); color: var(--on-primary); border-radius: 8px; font-size: 12px; font-weight: 450; white-space: nowrap; border: 1px solid transparent; }
 .primary-button:hover { opacity: .9; }
 .secondary-button { background: var(--surface-raised); color: var(--ink); border-color: var(--line-strong); }
-.attention-button > span { display: grid; place-items: center; font-family: var(--mono); border: 1px solid #ffffff35; height: 16px; min-width: 16px; padding: 0 3px; border-radius: 4px; font-size: 10px; }
+.attention-button > span { display: grid; place-items: center; font-family: var(--mono); border: 1px solid #0b0d1240; height: 16px; min-width: 16px; padding: 0 3px; border-radius: 4px; font-size: 10px; }
 .status-strip { display: flex; align-items: center; gap: 24px; padding: 11px 0 17px; margin-bottom: 1px; border-top: 1px solid var(--line); font-size: 11px; color: var(--body); }
 .status-strip > span { display: flex; align-items: center; gap: 6px; }
 .status-strip > span:first-child { color: var(--green); }

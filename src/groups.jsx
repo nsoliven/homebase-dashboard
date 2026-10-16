@@ -14,7 +14,7 @@ export function parseDeepLink(hash) {
   return m && GROUP_ID.test(m[1]) ? { type: 'group', group: m[1], metric: m[2] || null } : null;
 }
 const RANGE_WORDS = { '1h': 'last hour', '24h': 'last 24 hours', '7d': 'last 7 days' };
-const heat = load => isNumber(load) ? `color-mix(in oklab, #2c49b8 ${Math.round(Math.max(0, Math.min(100, load)))}%, #e6eaf7)` : 'var(--line)';
+const heat = load => isNumber(load) ? `color-mix(in oklab, #6a85ff ${Math.round(Math.max(0, Math.min(100, load)))}%, #1c2232)` : 'var(--line)';
 
 function useGroup(id, range) {
   const [state, setState] = useState({ loading: true, data: null, error: null });
@@ -48,7 +48,7 @@ function Derived({ d, range }) {
   </section>;
 }
 function PstateBar({ pstates }) {
-  const total = pstates.reduce((a, p) => a + p.ms, 0), ramp = i => `color-mix(in oklab, #2c49b8 ${Math.round(100 - i / Math.max(1, pstates.length - 1) * 75)}%, #e6eaf7)`;
+  const total = pstates.reduce((a, p) => a + p.ms, 0), ramp = i => `color-mix(in oklab, #6a85ff ${Math.round(100 - i / Math.max(1, pstates.length - 1) * 75)}%, #1c2232)`;
   return <div className="pstate-time"><h4>Time in each performance state</h4>
     <div className="pstate-bar" role="img" aria-label={pstates.map(p => `${p.state} ${duration(p.ms)}`).join(', ')}>{pstates.map((p, i) => <i key={p.state} style={{ flexGrow: p.ms, background: ramp(i) }} title={`${p.state} · ${duration(p.ms)}`} />)}</div>
     <div className="pstate-legend">{pstates.map((p, i) => <span key={p.state}><i style={{ background: ramp(i) }} /><strong>{p.state}</strong>{duration(p.ms)} · {fmt(share(p.ms, total), 0)}%</span>)}</div>
