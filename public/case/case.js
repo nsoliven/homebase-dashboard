@@ -46,7 +46,18 @@ renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
 const scene=new THREE.Scene();
 const cam=new THREE.PerspectiveCamera(34,1,0.3,60);   // the camera never gets closer than ~1.5 to a surface; a tiny near plane starves depth precision
 const controls=new THREE.OrbitControls(cam,canvas);
-controls.enableDamping=true;controls.target.set(0,3.0,0);controls.minDistance=3.5;controls.maxDistance=20;controls.enablePan=false;
+controls.enableDamping=true;controls.target.set(0,3.0,0);controls.minDistance=3.5;controls.maxDistance=20;controls.enablePan=false;controls.autoRotateSpeed=0.55;
+/* The stage stays passive until it is pressed, so scrolling the page past it never zooms the case.
+   Pressing it (drag or click) takes control; leaving it hands scroll back. Idle for a few seconds, it spins. */
+let stageActive=false,lastInput=-1e9;
+const stageHint=document.getElementById('stage-hint');
+function setStage(on){stageActive=on;controls.enabled=on;canvas.style.touchAction=on?'none':'pan-y';stageHint.hidden=on}
+const touched=()=>{lastInput=performance.now()};
+canvas.addEventListener('pointerdown',e=>{touched();if(!stageActive)setStage(true)},{capture:true});   // capture: runs before the controls' own handler, so the first drag works
+canvas.addEventListener('wheel',()=>{if(stageActive)touched()},{passive:true});
+canvas.addEventListener('pointerleave',e=>{if(!e.buttons)setStage(false)});
+addEventListener('blur',()=>setStage(false));
+setStage(false);
 
 function makeEnv(stops,boxes){
   const c=document.createElement('canvas');c.width=8;c.height=256;const g=c.getContext('2d');const gr=g.createLinearGradient(0,0,0,256);stops.forEach(([o,col])=>gr.addColorStop(o,col));g.fillStyle=gr;g.fillRect(0,0,8,256);
@@ -615,7 +626,7 @@ document.getElementById('tog-tint').onclick=e=>{tintOn=!tintOn;e.currentTarget.s
 /* ---------- camera, layers, panels ---------- */
 const VIEWS={iso:[-7.52,5.4,9.28],front:[0,3.0,12.2],right:[11.4,3.2,1.9],back:[0.35,3.2,-12.2],gpu:[-7.2,4.6,2.6],top:[0.01,15,0.6]};
 // a tall, narrow stage (phones) needs the camera further out to fit the whole case
-function setView(k){const r=canvas.getBoundingClientRect(),far=k==='top'?1:Math.max(1,Math.min(1.7,1.15/Math.max(0.4,r.width/Math.max(1,r.height))));const v=VIEWS[k];cam.position.set(v[0]*far,3+(v[1]-3)*far,v[2]*far);controls.update();Object.keys(VIEWS).forEach(v=>document.getElementById('cam-'+v).setAttribute('aria-pressed',v===k))}
+function setView(k){touched();const r=canvas.getBoundingClientRect(),far=k==='top'?1:Math.max(1,Math.min(1.7,1.15/Math.max(0.4,r.width/Math.max(1,r.height))));const v=VIEWS[k];cam.position.set(v[0]*far,3+(v[1]-3)*far,v[2]*far);controls.update();Object.keys(VIEWS).forEach(v=>document.getElementById('cam-'+v).setAttribute('aria-pressed',v===k))}
 Object.keys(VIEWS).forEach(k=>document.getElementById('cam-'+k).onclick=()=>setView(k));
 setView('iso');
 let showHeat=true,showLabels=false;   // labels off by default: the clean view
@@ -664,8 +675,9 @@ canvas.addEventListener('pointerup',e=>{if(down&&Math.hypot(e.clientX-down[0],e.
 let last=performance.now();
 function frame(now){
   const dt=Math.min(0.05,(now-last)/1000);last=now;const t=now/1000;
+  controls.autoRotate=!reduce&&performance.now()-lastInput>5000;
   controls.update();
-  const selGlow=Math.max(0,Math.min(1,1-(t-selT-1.4)/0.8));   // the selection ring flashes, then fades so the view stays clean
+  const selGlow=selT<0?0:t-selT<1.2?1:0.55;   // nothing ringed until you pick a group; then a bright flash that settles to a steady ring
   fans.forEach(f=>{
     const g=GROUPS[f.group];const rpm=g.readonly?0:rpmOf(f.group);
     const speed=reduce?0:Math.min(rpm/60,2.2)*Math.PI*2*0.55;   // capped well below the strobe point
@@ -748,8 +760,8 @@ svg.addEventListener('keydown',e=>{const c=e.target.closest('.pt');if(!c)return;
 document.querySelectorAll('[data-preset]').forEach(b=>b.onclick=()=>{const g=GROUPS[sel];if(g.readonly||g.fixed)return;const p=b.dataset.preset;g.curve=(p==='bios'?(sel==='rad'?[[50,20],[80,45],[95,60],[100,100]]:[[30,25],[50,35],[65,50],[80,60]]):PRESETS[p]).map(x=>[...x]);document.querySelectorAll('[data-preset]').forEach(c=>c.setAttribute('aria-pressed',c===b));drawCurve()});
 
 /* ---------- side panel ---------- */
-let selT=-1e9;
-function select(k,quiet){sel=k;const g=GROUPS[k];if(!quiet)selT=performance.now()/1000;
+let selT=-1;
+function select(k,quiet){sel=k;const g=GROUPS[k];if(!quiet){selT=performance.now()/1000;touched()}
   document.getElementById('g-name').textContent=g.name;
   document.getElementById('g-meta').textContent=g.readonly?`auto · ${g.temp}°C`:`${g.duty}% · ${g.temp}°C`;
   document.getElementById('dir-row').hidden=k!=='rear';

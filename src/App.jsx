@@ -1,4 +1,4 @@
-import { Applications, CoolingSummary, HostExplorer, ProxyAccounts, RangeTabs } from './explorers.jsx';
+import { Applications, HostExplorer, ProxyAccounts, RangeTabs } from './explorers.jsx';
 import { thermalState } from '../server/cooling.mjs';
 import { quotaReading, quotaSummary } from '../server/quota.mjs';
 import React, { useCallback, useEffect, useState } from 'react';
@@ -32,7 +32,7 @@ function Compute({ data, history, open }) {
     {!host ? <Empty title="Waiting for Proxmox" text={source.message} /> : <><div className="compute-top"><div className="big-reading"><div className="eyebrow">{chart.title}</div><strong>{fmt(chart.value)}<span>{chart.unit}</span></strong><p><Dot tone={source.status === 'connected' ? 'green' : 'amber'} />{host.name} · {host.threads} threads</p></div><div className="host-stats"><button className="host-temperature" onClick={()=>open({type:'host'})}><Thermometer size={15} /><span>CPU package</span><strong>{fmt(host.cpuTemperature, 0)}<small>°C</small></strong></button><div><Gauge size={15} /><span>Load average</span><strong>{fmt(host.load?.[0], 2)}</strong></div><div><Clock3 size={15} /><span>Uptime</span><strong>{duration(host.uptime)}</strong></div></div></div>
       <div className="chart-tabs" role="group" aria-label="Host chart metric">{['CPU', 'Temperature', 'Memory', 'Disk I/O'].map(m => <button key={m} aria-pressed={metric === m} className={metric === m ? 'selected' : ''} onClick={() => setMetric(m)}>{m}</button>)}<span className="chart-note">{metric === 'Disk I/O' ? 'Read / write' : 'Proxmox history'}</span></div>
       {history.error ? <Empty title="History unavailable" text={history.error} /> : <Chart statistics={history.statistics} points={history.points} loading={history.loading} metric={chart.key} secondary={chart.secondary} title={chart.title} scale={chart.scale} unit={chart.unit} max={chart.max} height={100} />}
-      <div className="compute-footer"><span className={thermal.tone==='warning'?'warning-text':''}><Dot tone={thermal.tone==='warning'?'amber':thermal.tone==='success'?'green':'gray'} />{thermal.label}</span><span>Memory <strong>{bytes(host.memoryUsed)} / {bytes(host.memoryTotal)}</strong></span></div><CoolingSummary cooling={host.cooling} onOpen={()=>open({type:'host',metric:'Fans'})}/></>}
+      <div className="compute-footer"><span className={thermal.tone==='warning'?'warning-text':''}><Dot tone={thermal.tone==='warning'?'amber':thermal.tone==='success'?'green':'gray'} />{thermal.label}</span><span>Memory <strong>{bytes(host.memoryUsed)} / {bytes(host.memoryTotal)}</strong></span></div></>}
   </Panel>;
 }
 
