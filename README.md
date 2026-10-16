@@ -38,6 +38,77 @@ or credentials were used.
 
 ![Correct quota percentages with current and historical sample account readings](docs/screenshots/quotas.png)
 
+![GPU and CPU showcase at idle, sample data](docs/screenshots/compute-idle.png)
+
+![GPU and CPU showcase under a simulated load, sample data](docs/screenshots/compute-load.png)
+
+![A details modal while a forced refresh is running, sample data](docs/screenshots/refresh-modal.png)
+
+## Force refresh
+
+Every card and details modal has a refresh control. `POST /api/refresh/<source>`
+(session + same-origin CSRF) accepts only known source IDs:
+
+- `proxmox` re-reads the Proxmox API now.
+- `proxy` calls CLI Proxy's fixed loopback `.../routing/quota/refresh` route,
+  which polls each account's usage, then bypasses the 15-second cache.
+- Collector scopes (`host`, `router`, `agents`, `quotas`, `compute`, `guest:<id>`)
+  are handed to the authenticated bridge through a long-poll at
+  `GET /api/ingest/requests`. The reply only names scopes the collector is
+  already allowed to send; the bridge maps each one to its own fixed collector.
+  The route waits up to 25 seconds for the new reading.
+
+Each source can be refreshed once per 10 seconds (30 seconds for provider
+quota sources). Passive sources (the Claude status line), unconnected sources,
+and scopes whose bridge is not listening are shown disabled with the reason.
+
+## GPU & CPU showcase
+
+`collectors/read-compute.py` is piped to the hypervisor by the bridge as
+`python3 -`. It runs only fixed `nvidia-smi --query-*` argv lists (no shell)
+and reads numeric `/proc` and hwmon files; process names are reduced to the
+executable basename. Board fan and temperature IDs match `read-linux.py`, so
+`cooling.channels` roles and reference speeds apply. Per-thread load and
+package power (RAPL) are differences between consecutive readings; the first
+reading after a gap shows them as measuring. While the panel is visible the
+browser polls `/api/compute?live=1`, which asks the bridge for 3-second
+collection for 12 seconds at a time; otherwise the bridge collects every 30
+seconds. Fan spin follows reported fan duty (GPU) or RPM (board), and glows
+follow load and temperature. Reduced-motion users get a static illustration.
+
+Fans never strobe: visual speed is capped below the wagon-wheel threshold and
+crisp blades blend (opacity only) into trailing copies and a rotational blur
+disc as speed rises; speed changes ease in. Reduced motion shows the blur that
+matches the current speed without spinning.
+
+Every part of the card and CPU package is a focusable hotspot. Hover or focus
+spotlights it; tap, click, Enter, or Space opens a popover with the reading, the
+last hour, and a "View history" action. Esc, an outside tap, or a second tap
+closes it and returns focus.
+
+## Per-metric history
+
+`GET /api/metrics/<id>?range=1h|24h|7d` (session required) returns chart points
+(min / avg / max) and statistics computed on the server over every stored
+sample in range: current, average, min, max, nearest-rank P95 and P99, and the
+times of the peak and low. IDs resolve through a fixed table in
+`server/metrics.mjs` (GPU, CPU, and per-CCD metrics) plus board fan and
+temperature sensor IDs that the hypervisor currently reports or that already
+have stored samples. Request text is never placed in SQL.
+
+Samples are written once per 30-second monitor poll, so live 3-second viewing
+never over-weights a period. Two tiers keep storage bounded:
+
+- `metric_raw`: every 30-second sample for 25 hours (1 h and 24 h views).
+- `metric_buckets`: 5-minute buckets for 8 days with count, sum, min, max,
+  the times of the min and max, and the bucket's samples (7 d view). Percentiles
+  over 7 days therefore remain exact.
+
+With 29 metrics this measured about 8.6 MB at steady state (1.8 MB raw,
+6.8 MB buckets). Old rows are pruned every ten minutes. The tables are
+created automatically on start. On the first poll with GPU and board readings,
+matching keys already in `history` are imported once.
+
 ## Data boundaries
 
 Runtime configuration is supplied by `HOMEBASE_CONFIG` outside this repository.

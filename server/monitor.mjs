@@ -2,6 +2,8 @@ import https from 'node:https';
 import { readFileSync } from 'node:fs';
 import { chartValues, deriveAlerts, guestFromResource, percent } from './model.mjs';
 import { coolingStatus } from './cooling.mjs';
+import { ComputeTracker, computeView } from './compute.mjs';
+import { legacyKeys, metricHistory, metricSpec, metricValues } from './metrics.mjs';
 
 export function requestProxmox(config, path) {
   if (!config) return Promise.reject(new Error('not_configured'));
@@ -23,7 +25,35 @@ export function requestProxmox(config, path) {
 }
 
 export class Monitor {
-  constructor(config, store, api = requestProxmox) { this.config = config; this.store = store; this.api = path => api(config.proxmox, path); this.busy = false; this.lastError = null; this.rates = new Map(); this.cache = new Map(); }
+  constructor(config, store, api = requestProxmox) { this.config = config; this.store = store; this.api = path => api(config.proxmox, path); this.polling = null; this.lastError = null; this.rates = new Map(); this.cache = new Map(); this.compute = new ComputeTracker(store); }
+  /** Converts a sanitized collector payload into what is stored. */
+  prepareFeed(scope, data, observed) {
+    if (scope !== 'compute') return data;
+    const view = this.compute.derive(data, observed);
+    this.compute.record(view, observed);
+    return view;
+  }
+  computeView() {
+    const feed = this.store.getFeed('compute', 120_000), pve = this.store.getFeed('proxmox');
+    return computeView(feed, pve?.data.resources, this.config.cooling);
+  }
+  /** Called on the 30-second poll so every metric is sampled at one steady cadence
+   * (3-second live readings would otherwise over-weight watched periods). */
+  recordCompute(view, now = Date.now()) {
+    if (!view || view.stale || !this.store.recordMetrics) return;
+    if (view.gpu && view.board?.fans?.length) this.store.backfillMetrics(legacyKeys(view), now);
+    this.store.recordMetrics(metricValues(view), now);
+  }
+  metricHistory(id, range, now = Date.now()) {
+    const spec = metricSpec(id, this.computeView(), name => this.store.hasMetric(name));
+    return spec ? metricHistory(this.store, spec, range, now) : null;
+  }
+  live() { const compute = this.computeView(); return { generatedAt: Date.now(), compute, series: this.compute.recent() }; }
+  /** Concurrent callers share one in-flight poll, so a forced refresh waits for real data. */
+  poll() {
+    if (!this.polling) this.polling = this.pollOnce().finally(() => { this.polling = null; });
+    return this.polling;
+  }
   rate(key, value, observed) {
     if (!Number.isFinite(value)) return null;
     const previous = this.rates.get(key);
@@ -31,9 +61,7 @@ export class Monitor {
     if (!previous || observed <= previous.observed || value < previous.value || observed - previous.observed > 120_000) return null;
     return (value - previous.value) / ((observed - previous.observed) / 1000);
   }
-  async poll() {
-    if (this.busy) return;
-    this.busy = true;
+  async pollOnce() {
     try {
       const node = this.config.proxmox?.node;
       if (node) {
@@ -59,15 +87,17 @@ export class Monitor {
         this.hostRates = { diskReadRate: this.rate('host.read', hostFeed.data.diskReadBytes, hostFeed.observed), diskWriteRate: this.rate('host.write', hostFeed.data.diskWriteBytes, hostFeed.observed) };
         this.hostObserved = hostFeed.observed;
       }
-      this.store.history(chartValues(this.snapshot()));
+      const snapshot = this.snapshot();
+      this.store.history(chartValues(snapshot));
+      this.recordCompute(snapshot.compute);
       this.store.prune();
-    } catch { this.lastError = 'Could not reach the Proxmox API. Last readings are retained.'; }
-    finally { this.busy = false; }
+    } catch { this.lastError = 'Could not reach the Proxmox API. Last readings are retained.'; try { this.recordCompute(this.computeView()); } catch {} }
+
   }
   snapshot() {
     const pve = this.store.getFeed('proxmox'), hostFeed = this.store.getFeed('host'), router = this.store.getFeed('router'), nas = this.store.getFeed('nas'), agentFeed = this.store.getFeed('agents'), quotas = this.store.getFeed('quotas', 180_000);
     const source = (id, label, feed, missing) => ({ id, label, status: !feed ? 'unavailable' : feed.stale ? 'stale' : 'connected', observedAt: feed?.observed || null, message: !feed ? missing : feed.stale ? 'No fresh measurements have arrived in the last two minutes.' : 'Receiving live measurements.' });
-    const sources = [source('proxmox', 'Proxmox', pve, 'Proxmox monitoring is not connected.'), source('host', 'Host telemetry', hostFeed, 'Host temperatures and PSI are not connected.'), source('nas', 'TrueNAS', nas, 'NAS access is needed to connect pool health and capacity.'), source('router', 'Router', router, 'Router telemetry is not connected.'), source('agents', 'T3 sessions', agentFeed, 'The T3 session bridge is not connected.'), source('quotas', 'AI usage', quotas, 'No provider quota readings have arrived.')];
+    const sources = [source('proxmox', 'Proxmox', pve, 'Proxmox monitoring is not connected.'), source('host', 'Host telemetry', hostFeed, 'Host temperatures and PSI are not connected.'), source('nas', 'TrueNAS', nas, 'NAS access is needed to connect pool health and capacity.'), source('router', 'Router', router, 'Router telemetry is not connected.'), source('agents', 'T3 sessions', agentFeed, 'The T3 session bridge is not connected.'), source('quotas', 'AI usage', quotas, 'No provider quota readings have arrived.'), source('compute', 'GPU & CPU', this.store.getFeed('compute'), 'GPU and CPU telemetry is not connected.')];
     if (this.lastError) Object.assign(sources[0], { status: 'error', message: this.lastError });
     let host = null;
     if (pve) {
@@ -89,6 +119,7 @@ export class Monitor {
       nas: nas && !nas.stale ? { ...nas.data, ...this.nasRates } : null,
       agents: agentFeed && !agentFeed.stale ? agentFeed.data.agents.map(a => ({ ...a, acknowledged: this.store.acknowledged(`agent:${a.id}`, `${a.status}:${a.updatedAt}`) })) : [],
       quotas: quotas && !quotas.stale ? quotas.data : { codex: null, claude: null },
+      compute: this.computeView(),
     };
     result.alerts = deriveAlerts(result).map(a => ({ ...a, acknowledged: this.store.acknowledged(a.id, a.signature) }));
     return result;

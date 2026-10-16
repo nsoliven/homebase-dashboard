@@ -29,7 +29,7 @@ function CoolingDetail({cooling,statistics,onSelect,selected}) {
   </section>;
 }
 
-export function HostExplorer({host,close,initialMetric='Temperature'}) {
+export function HostExplorer({host,close,initialMetric="Temperature",actions}) {
   const [range,setRange]=useState('1h'),[metric,setMetric]=useState(initialMetric),[sensor,setSensor]=useState(null);
   const history=useHistory(range);
   const selected=host.temperatures.find(t=>t.id===sensor);
@@ -38,7 +38,7 @@ export function HostExplorer({host,close,initialMetric='Temperature'}) {
   const metrics={Temperature:{key: sensor?`temperature.${sensor}`:'host.temperature',title:selected?.name||'CPU package temperature',value:selected?.value??host.cpuTemperature,unit:'°C'},CPU:{key:'host.cpu',title:'CPU utilization',value:host.cpu,unit:'%',max:100},Fans:{key:`fan.${fan?.id||'unavailable'}`,title:fan?.name||'Fan speed',value:fan?.rpm,unit:' RPM'},Memory:{key:'host.memory',title:'Memory utilization',value:percentage(host.memoryUsed,host.memoryTotal),unit:'%',max:100},'Disk I/O':{key:'host.diskRead',secondary:'host.diskWrite',title:'Disk throughput · read / write',value:host.diskReadRate,unit:'MB/s',scale:1e6}};
   const current=metrics[metric],summary=history.statistics?.[current.key];
   const groups=[...new Set(host.temperatures.map(t=>t.group||'Other'))];
-  return <Dialog title={host.name} close={close}><div className="detail-subtitle"><Badge><Cpu size={12}/>{host.threads} threads</Badge><span>{host.cpuModel}</span></div>
+  return <Dialog title={host.name} close={close} actions={actions}><div className="detail-subtitle"><Badge><Cpu size={12}/>{host.threads} threads</Badge><span>{host.cpuModel}</span></div>
     <div className="explorer-toolbar"><div className="chart-tabs" role="group" aria-label="Host detail metric">{Object.keys(metrics).map(m=><button key={m} aria-pressed={metric===m} className={metric===m?'selected':''} onClick={()=>{setMetric(m);setSensor(null);}}>{m}</button>)}</div><RangeTabs range={range} setRange={setRange}/></div>
     <section className="metric-explorer"><div className="metric-hero"><div><span className="eyebrow">{current.title}</span><strong>{fmt(isNumber(current.value)?current.value/(current.scale||1):null,metric==='Fans'?0:1)}<small>{current.unit}</small></strong></div><Badge tone={metric==='Temperature'&&!sensor?thermal.tone:'neutral'}>{metric==='Temperature'&&!sensor?thermal.label:'Latest reading'}</Badge></div>
       {metric==='Temperature'&&!sensor&&thermal.limit&&<p className="thermal-context">{fmt(host.cpu,0)}% overall CPU · {thermal.limit}°C rated limit. Boost can reach this limit before overall utilization reaches 100%.</p>}

@@ -18,7 +18,32 @@ export function useSnapshot(session, expire) {
   }, [session, expire]);
   useEffect(() => { if (!session?.user) { setData(null); return; } load(); const timer = setInterval(() => { if (!document.hidden) load(); }, 10000); const visible = () => { if (!document.hidden) load(); }; document.addEventListener('visibilitychange', visible); return () => { clearInterval(timer); document.removeEventListener('visibilitychange', visible); }; }, [load, session]);
   const acknowledge = useCallback(async id => { await request('/api/acknowledge', { method: 'POST', headers: { 'X-Homebase-CSRF': session.csrf }, body: JSON.stringify({ id }) }); await load(); }, [session, load]);
-  return { data, error, refreshing, refresh: () => load(true), acknowledge };
+  return { data, error, refreshing, refresh: () => load(true), acknowledge, replace: setData };
+}
+/** Re-renders on an interval so relative times ("Observed 4s ago") stay honest. */
+export function useNow(interval = 1000) {
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => { const timer = setInterval(() => { if (!document.hidden) setNow(Date.now()); }, interval); return () => clearInterval(timer); }, [interval]);
+  return now;
+}
+/** Live GPU/CPU readings while the panel is on screen; the server shortens the
+ * collector interval only while these requests keep arriving. */
+export function useComputeLive(enabled) {
+  const [state, setState] = useState({ compute: null, series: [], loaded: false, error: null });
+  useEffect(() => {
+    if (!enabled) return;
+    let cancelled = false, timer;
+    const load = async () => {
+      if (!document.hidden) {
+        try { const next = await request('/api/compute?live=1'); if (!cancelled) setState({ ...next, loaded: true, error: null }); }
+        catch (e) { if (!cancelled) setState(s => ({ ...s, loaded: true, error: e.message })); }
+      }
+      if (!cancelled) timer = setTimeout(load, 3000);
+    };
+    load();
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [enabled]);
+  return [state, setState];
 }
 export function useHistory(range, guest, enabled = true) {
   const [state, setState] = useState({ points: [], loading: true, error: null });
@@ -42,5 +67,5 @@ export function useIntegrations(enabled) {
     const load=async()=>{try{const next=await request('/api/integrations',{signal:controller.signal});if(!cancelled)setData(next);}catch{}};
     load();const timer=setInterval(()=>{if(!document.hidden)load();},30000);
     return()=>{cancelled=true;controller.abort();clearInterval(timer);};
-  },[enabled]);return data;
+  },[enabled]);return {...data,replace:setData};
 }
