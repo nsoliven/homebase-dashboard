@@ -821,7 +821,7 @@ async function setMode(mode){
 }
 document.getElementById('mode-curves').onclick=()=>setMode('curves');
 document.getElementById('mode-bios').onclick=()=>setMode('bios');
-identifyEl.onclick=async()=>{if(!live.on||!CONTROLLED.includes(sel))return;say(`${GROUPS[sel].name} at 60% for 4 s · everything else stopped…`);try{await api('POST',{pulse:sel});setTimeout(poll,1500)}catch(e){say(`Not changed · ${e.message}`,'bad')}};
+identifyEl.onclick=async()=>{if(!live.on||!CONTROLLED.includes(sel))return;say(`${GROUPS[sel].name} at 100% for 4 s · everything else stopped…`);try{await api('POST',{pulse:sel});setTimeout(poll,1500)}catch(e){say(`Not changed · ${e.message}`,'bad')}};
 (async()=>{
   try{
     const s=await fetch('/api/session',{credentials:'same-origin'}).then(r=>r.json());
