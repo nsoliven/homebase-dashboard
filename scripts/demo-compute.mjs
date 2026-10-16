@@ -21,7 +21,8 @@ function reading(ts, mode) {
     utilization: Math.round(gpuUtil), memoryUtilization: load ? Math.round(58 + wave(t, 5, 6)) : 0, encoder: load ? Math.round(34 + wave(t, 6, 5)) : 0, decoder: load ? Math.round(12 + wave(t, 8, 3)) : 0,
     memoryUsed: load ? 6550 : 57, memoryTotal: 8192, powerDraw: +(load ? 226 + wave(t, 4, 9) : 20.9 + wave(t, 11, .3)).toFixed(2), powerLimit: 270, powerMaxLimit: 270,
     coreClock: load ? Math.round(1950 + wave(t, 5, 25)) : 210, memoryClock: load ? 7000 : 405, coreClockMax: 2100, memoryClockMax: 7001,
-    fan: load ? Math.round(62 + wave(t, 30, 2)) : 0, pcieGen: load ? 4 : 1, pcieWidth: 16, throttle: load ? 4 : 1,
+    fan: load ? Math.round(62 + wave(t, 30, 2)) : 0, pcieGen: load ? 4 : 1, pcieWidth: 16, throttle: load ? (Math.sin(t / 40) > 0.2 ? 4 : 0) : 1,
+    pcieGenMax: 4, pcieWidthMax: 16, encoderSessions: load ? 2 : 0, encoderFps: load ? Math.round(118 + wave(t, 9, 4)) : 0, encoderLatency: load ? Math.round(2400 + wave(t, 7, 300)) : 0, vbios: '94.04.3A.40.DB',
   };
   const threads = Array.from({ length: 24 }, (_, i) => {
     const core = i % 12, ccd = core < 6 ? 0 : 1, base = load ? (ccd ? 72 : 88) : (ccd ? 4 : 9);
@@ -47,7 +48,9 @@ export function seedHistory(store, now = Date.now()) {
   const n = 7 * 2880;
   for (let i = 0; i < n; i++) {
     const ts = now - (n - 1 - i) * 30_000, hour = new Date(ts).getHours(), busy = (hour >= 19 && hour < 23) || (hour === 13 && new Date(ts).getDay() % 2 === 0);
-    store.recordMetrics(metricValues({ ...reading(ts, busy ? 'load' : 'idle'), stale: false }), ts);
+    const values = metricValues({ ...reading(ts, busy ? 'load' : 'idle'), stale: false });
+    values['gpu.vram.ct.209'] ??= 0;
+    store.recordMetrics(values, ts);
   }
 }
 export function view() { const ts = Date.now(); return { ...reading(ts, scenario), observedAt: ts - 1200, stale: false }; }

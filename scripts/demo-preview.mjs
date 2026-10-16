@@ -9,6 +9,7 @@ import * as demoCompute from './demo-compute.mjs';
 import { setScenario } from './demo-compute.mjs';
 import { Store } from '../server/store.mjs';
 import { METRIC_ID, RANGES, metricHistory, metricSpec } from '../server/metrics.mjs';
+import { GROUP_ID, groupDetail } from '../server/compute-groups.mjs';
 
 // In-memory only; synthetic samples through the production metric tiers.
 const metricStore = new Store(':memory:');
@@ -131,6 +132,11 @@ http.createServer(async(req,res)=>{
   if(metricRoute){
     const range=url.searchParams.get('range')||'24h',spec=METRIC_ID.test(metricRoute[1])&&Object.hasOwn(RANGES,range)?metricSpec(metricRoute[1],demoCompute.view(),name=>metricStore.hasMetric(name)):null;
     res.writeHead(spec?200:404,{'Content-Type':'application/json'});res.end(JSON.stringify(spec?metricHistory(metricStore,spec,range):{error:'Unknown metric.'}));return;
+  }
+  const groupRoute=url.pathname.match(/^\/api\/compute\/groups\/([a-zA-Z0-9.]{1,60})$/);
+  if(groupRoute){
+    const range=url.searchParams.get('range')||'24h',result=GROUP_ID.test(groupRoute[1])&&Object.hasOwn(RANGES,range)?groupDetail(metricStore,demoCompute.view(),groupRoute[1],range,{thermalLimit:95}):null;
+    res.writeHead(result?200:404,{'Content-Type':'application/json'});res.end(JSON.stringify(result||{error:'Unknown group.'}));return;
   }
   if(url.pathname==='/api/session')data={user:{name:'Demo operator'},csrf:'sample-only',configured:true};
   else if(['/api/snapshot','/api/refresh'].includes(url.pathname))data=demoSnapshot();

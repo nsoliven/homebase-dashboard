@@ -61,13 +61,16 @@ test('the hypervisor probe parses nvidia-smi output without inventing missing fi
 import importlib.util, json, sys
 spec = importlib.util.spec_from_file_location('probe', sys.argv[1]); probe = importlib.util.module_from_spec(spec); spec.loader.exec_module(probe)
 gpu = probe.parse_gpu('Sample GPU, 1.2.3, P8, 45, N/A, 0, 0, 0, 0, 57, 8192, 20.90, 270.00, 210, 405, 0\\n')
-limits = probe.parse_gpu('2100, 7001, 270.00, 4, 16, 0x0000000000000001', probe.LIMIT_FIELDS)
+limits = probe.parse_gpu('2100, 7001, 270.00, 4, 16, 0x0000000000000004, 4, 16, 2, 59.5, 812, 94.04.3A.40.DB', probe.LIMIT_FIELDS)
 apps = probe.parse_apps('123, /usr/bin/sample, 512\\nnot a row\\n')
 print(json.dumps({'gpu': gpu, 'limits': limits, 'short': probe.parse_gpu('a, b'), 'apps': apps, 'commands': probe.COMMANDS}))
 `;
   const out = JSON.parse(execFileSync('python3', ['-I', '-c', code, probe], { encoding: 'utf8' }));
   assert.equal(out.gpu.memoryTemperature, null); assert.equal(out.gpu.temperature, 45); assert.equal(out.gpu.pstate, 'P8');
-  assert.equal(out.limits.throttle, 1); assert.equal(out.short, null);
+  assert.equal(out.limits.throttle, 4); assert.equal(out.short, null);
+  assert.equal(out.limits.encoderSessions, 2); assert.equal(out.limits.pcieGenMax, 4); assert.equal(out.limits.vbios, '94.04.3A.40.DB');
+  const fields = out.commands.limits[1];
+  for (const banned of ['serial', 'uuid', 'pci.bus', 'pci.device']) assert.ok(!fields.includes(banned), banned);
   assert.deepEqual(out.apps.map(a => [a.pid, a.name, a.memory]), [[123, 'sample', 512]]);
   for (const argv of Object.values(out.commands)) assert.equal(argv[0], 'nvidia-smi');
 });
