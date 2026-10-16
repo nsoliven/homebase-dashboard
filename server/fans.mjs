@@ -7,7 +7,20 @@ export const FAN_GROUPS = ['rad', 'top', 'floor', 'rear'];
 /** Same rules the host enforces: 2-8 points, rising temperatures 20-100 °C, duty 0-100%. */
 export function validFanRequest(body) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return null;
-  if ('mode' in body) return ['curves', 'bios'].includes(body.mode) ? { mode: body.mode } : null;
+  if ('mode' in body) return ['curves', 'bios', 'direct'].includes(body.mode) ? { mode: body.mode } : null;
+  if ('direct' in body) {   // {channel: 0-100 | null}; never the pump (channel 2)
+    const d = body.direct;
+    if (!d || typeof d !== 'object' || Array.isArray(d)) return null;
+    const entries = Object.entries(d);
+    if (!entries.length || entries.length > 7) return null;
+    const out = {};
+    for (const [ch, v] of entries) {
+      if (!['1', '3', '4', '5', '6', '7', '8'].includes(ch)) return null;
+      if (v !== null && !(typeof v === 'number' && Number.isFinite(v) && v >= 0 && v <= 100)) return null;
+      out[ch] = v === null ? null : Math.round(v);
+    }
+    return { direct: out };
+  }
   if ('pulse' in body) return FAN_GROUPS.includes(body.pulse) ? { pulse: body.pulse } : null;
   if ('release' in body) return FAN_GROUPS.includes(body.release) ? { release: body.release } : null;
   if ('hold' in body) {
