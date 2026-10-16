@@ -9,15 +9,13 @@ const isDark=()=>{const t=document.documentElement.dataset.theme;return t?t==='d
 const small=matchMedia('(max-width: 640px)').matches;
 
 /* Readings from prox at 19:00 on 2026-10-15. */
-const HEADERS=[   // BIOS names; the map was confirmed with Identify on 2026-10-15 (top: System Fan 1 + 6, which report no RPM)
+const HEADERS=[   // BIOS names; each case pair shares one header through a splitter. SYS1 and SYS6 are empty.
  {id:'CPU Fan 1',rpm:1118,group:'rad'},
  {id:'Pump Sys Fan 1',rpm:3200,group:'pump'},
- {id:'System Fan 1',rpm:0,group:'top'},
  {id:'System Fan 2',rpm:813,group:'rear'},
  {id:'System Fan 3',rpm:1101,group:'rear'},
- {id:'System Fan 4',rpm:1143,group:'floor'},
- {id:'System Fan 5',rpm:1032,group:'floor'},
- {id:'System Fan 6',rpm:0,group:'top'},
+ {id:'System Fan 4',rpm:1114,group:'top'},
+ {id:'System Fan 5',rpm:852,group:'floor'},
 ];
 const GROUPS={
  rad:{name:'Radiator',count:'3 × 120 mm',dir:'Exhaust · right grille',color:'#4a5fd6',src:'tctl',temp:61,duty:38,curve:[[50,20],[80,45],[95,60],[100,100]]},
@@ -30,7 +28,7 @@ const GROUPS={
 const rearDir=()=>GROUPS.rear.flow==='in'?'Intake · from the back':'Exhaust · out the back';
 GROUPS.rear.dir=rearDir();
 const liveRpm={};   // filled from prox when fan control is connected
-const rpmOf=g=>{if(liveRpm[g]!=null)return liveRpm[g];if(g==='top')return Math.round((GROUPS.top?.duty??40)*18);const h=HEADERS.filter(h=>h.group===g);return h.length?Math.round(h.reduce((a,b)=>a+b.rpm,0)/h.length):0};
+const rpmOf=g=>{if(liveRpm[g]!=null)return liveRpm[g];const h=HEADERS.filter(h=>h.group===g);return h.length?Math.round(h.reduce((a,b)=>a+b.rpm,0)/h.length):0};
 // rough fan airflow: ~60 CFM for a 120 mm fan at 1,500 rpm, scaling with rpm and diameter³; radiators restrict ~35%
 const cfm=(rpm,size)=>60*(rpm/1500)*Math.pow(size/1.2,3);
 let sel='rad';
