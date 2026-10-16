@@ -22,6 +22,10 @@ export function sanitizeCompute(p) {
     coreClockMax: number(g.coreClockMax, 0, 10000), memoryClockMax: number(g.memoryClockMax, 0, 30000),
     fan: number(g.fan, 0, 100), pcieGen: number(g.pcieGen, 0, 10), pcieWidth: number(g.pcieWidth, 0, 32),
     throttle: Number.isSafeInteger(g.throttle) && g.throttle >= 0 ? g.throttle : null,
+    pcieGenMax: number(g.pcieGenMax, 0, 10), pcieWidthMax: number(g.pcieWidthMax, 0, 32),
+    encoderSessions: number(g.encoderSessions, 0, 10000), encoderFps: number(g.encoderFps, 0, 100000), encoderLatency: number(g.encoderLatency, 0, 1e9),
+    // Firmware release string only (e.g. "94.04.3A.40.DB"); never a serial or UUID.
+    vbios: /^[0-9A-Fa-f]{2}(?:\.[0-9A-Fa-f]{2}){3,5}$/.test(g.vbios || '') ? g.vbios : null,
   } : null;
   const c = p.cpu && typeof p.cpu === 'object' ? p.cpu : {};
   const b = p.board && typeof p.board === 'object' ? p.board : {};

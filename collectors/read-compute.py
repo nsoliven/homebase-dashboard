@@ -29,8 +29,13 @@ LIMIT_FIELDS = [
     ('clocks.max.gr', 'coreClockMax'), ('clocks.max.mem', 'memoryClockMax'),
     ('power.max_limit', 'powerMaxLimit'), ('pcie.link.gen.current', 'pcieGen'),
     ('pcie.link.width.current', 'pcieWidth'), ('clocks_throttle_reasons.active', 'throttle'),
+    ('pcie.link.gen.max', 'pcieGenMax'), ('pcie.link.width.max', 'pcieWidthMax'),
+    ('encoder.stats.sessionCount', 'encoderSessions'), ('encoder.stats.averageFps', 'encoderFps'),
+    ('encoder.stats.averageLatency', 'encoderLatency'), ('vbios_version', 'vbios'),
 ]
-TEXT_FIELDS = {'name', 'driver', 'pstate'}
+# vbios_version is a firmware release string shared by every card of the model,
+# not a per-device identifier. Serials, UUIDs and PCI bus IDs are never queried.
+TEXT_FIELDS = {'name', 'driver', 'pstate', 'vbios'}
 COMMANDS = {
     'gpu': ['nvidia-smi', '--query-gpu=' + ','.join(f for f, _ in GPU_FIELDS), '--format=csv,noheader,nounits'],
     'limits': ['nvidia-smi', '--query-gpu=' + ','.join(f for f, _ in LIMIT_FIELDS), '--format=csv,noheader,nounits'],

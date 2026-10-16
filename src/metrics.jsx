@@ -6,7 +6,7 @@ import { RangeTabs } from './explorers.jsx';
 import { RefreshButton } from './refresh.jsx';
 
 export const unitText = unit => !unit ? '' : ['°C', '%'].includes(unit) ? unit : ` ${unit}`;
-export const digits = unit => ['RPM', 'MHz'].includes(unit) ? 0 : 1;
+export const digits = unit => ['RPM', 'MHz', 'sessions', 'fps', 'µs'].includes(unit) ? 0 : unit === 'V' ? 3 : unit === '' ? 2 : 1;
 export const formatValue = (value, unit) => isNumber(value) ? `${fmt(value, digits(unit))}${unitText(unit)}` : '—';
 const when = ts => ts ? new Date(ts).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '—';
 
@@ -36,7 +36,7 @@ export function BandChart({ data, height = 190, compact = false }) {
   const width = 600, from = data.from, to = data.to, span = to - from || 1;
   const lo = Math.min(...points.map(p => p.min)), hi = Math.max(...points.map(p => p.max));
   // Minimum visible span per unit so sensor noise is not magnified into drama.
-  const minSpan = { '°C': 6, '%': 10, W: 10, MHz: 200, RPM: 200 }[spec.unit] ?? 1;
+  const minSpan = { '°C': 6, '%': 10, W: 10, MHz: 200, RPM: 200, V: 0.1, GiB: 0.5, fps: 10, 'µs': 100 }[spec.unit] ?? 1;
   const pad = Math.max((hi - lo) * 0.12, (minSpan - (hi - lo)) / 2, 0.5);
   const bottom = spec.max ? 0 : Math.max(0, lo - pad), top = spec.max || hi + pad;
   const x = ts => (ts - from) / span * width, y = v => height - 6 - (v - bottom) / (top - bottom || 1) * (height - 12);
@@ -65,22 +65,29 @@ export function BandChart({ data, height = 190, compact = false }) {
   </div>;
 }
 
-/** Detail view for one compute metric: range switch, band chart, server-side statistics. */
-export function MetricHistory({ id, close, back }) {
-  const [range, setRange] = useState('24h'), { data, loading, error } = useMetric(id, range);
+/** One metric over a range: stat tiles, peak and low times, band chart. */
+export function MetricPanel({ id, range, title, live }) {
+  const { data, loading, error } = useMetric(id, range);
   const spec = data?.metric, s = data?.statistics, unit = spec?.unit;
   const tiles = [['current', 'Current'], ['average', 'Average'], ['min', 'Min'], ['max', 'Max'], ['p95', 'P95'], ['p99', 'P99']];
+  return <section className="metric-explorer metric-history" aria-label={spec?.label || title || 'Metric history'}>
+    {error && !data ? <Empty title="History unavailable" text={error} /> : <>
+      {title && <div className="metric-panel-title"><strong>{spec?.label || title}</strong><span>{data?.resolution}</span></div>}
+      <div className="metric-tiles" aria-busy={loading || undefined}>{tiles.map(([k, label]) => <div key={k} className={k === 'current' ? 'is-current' : ''}><span title={k === 'p99' ? '99th percentile (nearest rank) of every sample in range' : k === 'p95' ? '95th percentile (nearest rank)' : k === 'current' ? (isNumber(live) ? 'Latest live reading' : 'Latest stored sample') : undefined}>{label}</span><strong>{(v => isNumber(v) ? fmt(v, digits(unit)) : '—')(k === 'current' && isNumber(live) ? live : s?.[k])}<small>{unitText(unit)}</small></strong></div>)}</div>
+      <div className="peak-line"><TrendingUp size={14} /><span>{s ? <>Peak <strong>{formatValue(s.max, unit)}</strong> at {when(s.peakAt)} · low <strong>{formatValue(s.min, unit)}</strong> at {when(s.lowAt)}</> : 'No samples in this range yet'}</span></div>
+      {loading && !data ? <div className="chart-placeholder" style={{ minHeight: 220 }}>Loading history…</div> : <BandChart data={data} />}
+      <div className="chart-legend"><span><i className="legend-line" />Average</span><span><i className="legend-band" />Min – max</span></div>
+      <div className="sample-note">{s ? `${s.count.toLocaleString()} samples · ${when(s.first)} onwards` : 'History begins when this metric is first recorded. Earlier periods are not estimated.'}<span>P95 / P99 are nearest-rank over the original samples</span></div>
+    </>}
+  </section>;
+}
+
+/** Detail view for one compute metric: range switch, band chart, server-side statistics. */
+export function MetricHistory({ id, close, back }) {
+  const [range, setRange] = useState('24h'), { data } = useMetric(id, range), spec = data?.metric;
   return <Dialog title={spec?.label || 'Metric history'} close={close} actions={<RefreshButton sources={['compute']} label="Refresh GPU and CPU readings" showStatus />}>
     <div className="detail-subtitle">{back && <button className="secondary-button back-button" onClick={back}><ArrowLeft size={14} />GPU &amp; CPU</button>}<Badge>{spec?.group || 'Compute'}</Badge><span>{data ? `${data.resolution} · statistics over every sample in range` : 'Loading…'}</span></div>
     <div className="explorer-toolbar"><RangeTabs range={range} setRange={setRange} /></div>
-    <section className="metric-explorer metric-history">
-      {error && !data ? <Empty title="History unavailable" text={error} /> : <>
-        <div className="metric-tiles" aria-busy={loading || undefined}>{tiles.map(([k, label]) => <div key={k} className={k === 'current' ? 'is-current' : ''}><span title={k === 'p99' ? '99th percentile (nearest rank) of every sample in range' : k === 'p95' ? '95th percentile (nearest rank)' : undefined}>{label}</span><strong>{isNumber(s?.[k]) ? fmt(s[k], digits(unit)) : '—'}<small>{unitText(unit)}</small></strong></div>)}</div>
-        <div className="peak-line"><TrendingUp size={14} /><span>{s ? <>Peak <strong>{formatValue(s.max, unit)}</strong> at {when(s.peakAt)} · low {formatValue(s.min, unit)} at {when(s.lowAt)}</> : 'No samples in this range yet'}</span></div>
-        {loading && !data ? <div className="chart-placeholder" style={{ minHeight: 220 }}>Loading history…</div> : <BandChart data={data} />}
-        <div className="chart-legend"><span><i className="legend-line" />Average</span><span><i className="legend-band" />Min – max</span></div>
-        <div className="sample-note">{s ? `${s.count.toLocaleString()} samples · ${when(s.first)} onwards` : 'History begins when this metric is first recorded. Earlier periods are not estimated.'}<span>P95 / P99 are nearest-rank over the original samples</span></div>
-      </>}
-    </section>
+    <MetricPanel id={id} range={range} />
   </Dialog>;
 }

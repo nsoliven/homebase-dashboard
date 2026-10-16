@@ -11,6 +11,7 @@ import { Auth, cookie, setCookie, sessionCookie, loginCookie } from './auth.mjs'
 import { sanitizeFeed } from './model.mjs';
 import { RefreshCoordinator, SOURCE_ID } from './refresh.mjs';
 import { METRIC_ID, RANGES } from './metrics.mjs';
+import { GROUP_ID } from './compute-groups.mjs';
 
 const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.txt': 'text/plain; charset=utf-8' };
 const json = (res, status, data) => { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(data)); };
@@ -95,7 +96,14 @@ export function createApp(config, store, monitor, auth = new Auth(config.oidc, s
         const result = monitor.metricHistory ? monitor.metricHistory(metricRoute[1], range) : null;
         return result ? json(res, 200, result) : json(res, 404, { error: 'Unknown metric.' });
       }
-      const sourceRefresh =url.pathname.match(/^\/api\/refresh\/([^/]{1,48})$/);
+      const groupRoute = url.pathname.match(/^\/api\/compute\/groups\/([a-zA-Z0-9.]{1,60})$/);
+      if (groupRoute && req.method === 'GET') {
+        const range = url.searchParams.get('range') || '24h';
+        if (!Object.hasOwn(RANGES, range) || !GROUP_ID.test(groupRoute[1])) return json(res, 400, { error: 'Invalid group request.' });
+        const result = monitor.groupDetail ? monitor.groupDetail(groupRoute[1], range) : null;
+        return result ? json(res, 200, result) : json(res, 404, { error: 'Unknown group.' });
+      }
+      const sourceRefresh = url.pathname.match(/^\/api\/refresh\/([^/]{1,48})$/);
       if (sourceRefresh && req.method === 'POST') {
         let id; try { id = decodeURIComponent(sourceRefresh[1]); } catch { id = ''; }
         if (!SOURCE_ID.test(id)) return json(res, 400, { error: 'Unknown source.' });

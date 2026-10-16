@@ -1,7 +1,8 @@
 import https from 'node:https';
 import { readFileSync } from 'node:fs';
 import { chartValues, deriveAlerts, guestFromResource, percent } from './model.mjs';
-import { coolingStatus } from './cooling.mjs';
+import { coolingStatus, thermalState } from './cooling.mjs';
+import { groupDetail } from './compute-groups.mjs';
 import { ComputeTracker, computeView } from './compute.mjs';
 import { legacyKeys, metricHistory, metricSpec, metricValues } from './metrics.mjs';
 
@@ -42,7 +43,14 @@ export class Monitor {
   recordCompute(view, now = Date.now()) {
     if (!view || view.stale || !this.store.recordMetrics) return;
     if (view.gpu && view.board?.fans?.length) this.store.backfillMetrics(legacyKeys(view), now);
-    this.store.recordMetrics(metricValues(view), now);
+    const values = metricValues(view);
+    // A container that stops using the GPU reads as 0 GiB rather than a gap.
+    if (view.gpu) for (const name of this.store.metricIds.keys()) if (/^gpu\.vram\.ct\.\d+$/.test(name) && !(name in values)) values[name] = 0;
+    this.store.recordMetrics(values, now);
+  }
+  groupDetail(id, range, now = Date.now()) {
+    const pve = this.store.getFeed('proxmox'), status = pve?.data.status;
+    return groupDetail(this.store, this.computeView(), id, range, { now, thermalLimit: thermalState({ cpuModel: status?.cpuinfo?.model }).limit });
   }
   metricHistory(id, range, now = Date.now()) {
     const spec = metricSpec(id, this.computeView(), name => this.store.hasMetric(name));

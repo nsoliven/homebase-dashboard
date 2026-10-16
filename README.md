@@ -86,6 +86,24 @@ spotlights it; tap, click, Enter, or Space opens a popover with the reading, the
 last hour, and a "View history" action. Esc, an outside tap, or a second tap
 closes it and returns focus.
 
+## Part details
+
+Clicking a side readout, a part of the illustration (wide layouts), the
+popover's "Open details", a board fan, a process, or a row in the GPU & CPU
+modal opens that part's detail: a modal on desktop and a bottom sheet at
+640 px and below. Hover only previews. `GET /api/compute/groups/<group>?range=`
+(session required; IDs from a fixed pattern in `server/compute-groups.mjs`)
+returns the live header values, every metric in the group, facts, and figures
+derived on the server from stored 30-second samples:
+
+- energy used (each sample counts for its 30-second poll; gaps are not filled),
+- time at or above 95 % of the power limit recorded at the same poll,
+- time in each P-state and per clock-limiter reason
+  (`clocks_throttle_reasons.active`, decoded in `server/gpu-reasons.mjs`).
+
+CCD details include a per-thread grid; each thread has its own load history.
+`#compute/<group>/<metric>` reopens the same detail.
+
 ## Per-metric history
 
 `GET /api/metrics/<id>?range=1h|24h|7d` (session required) returns chart points
@@ -104,8 +122,9 @@ never over-weights a period. Two tiers keep storage bounded:
   the times of the min and max, and the bucket's samples (7 d view). Percentiles
   over 7 days therefore remain exact.
 
-With 29 metrics this measured about 8.6 MB at steady state (1.8 MB raw,
-6.8 MB buckets). Old rows are pruned every ten minutes. The tables are
+About 70 metrics are recorded on a 12-core, two-CCD host (per-thread load,
+per-CCD figures, P-state, limiter bits). That measured 21.6 MB at steady state
+(4.5 MB raw, 17.1 MB buckets), about 0.6 ms per poll to write. Old rows are pruned every ten minutes. The tables are
 created automatically on start. On the first poll with GPU and board readings,
 matching keys already in `history` are imported once.
 

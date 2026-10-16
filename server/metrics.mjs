@@ -24,14 +24,45 @@ export const STATIC_METRICS = {
   'cpu.utilization': { group: 'CPU', label: 'CPU utilization', unit: '%', max: 100, read: v => v.cpu?.utilization, legacy: ['compute.cpu'] },
   'cpu.power': { group: 'CPU', label: 'CPU package power', unit: 'W', read: v => v.cpu?.power },
   'cpu.clock': { group: 'CPU', label: 'CPU average clock', unit: 'MHz', read: v => v.cpu?.clockAverage },
+  'gpu.memoryUtilization': { group: 'GPU', label: 'Memory bus utilization', unit: '%', max: 100, read: v => v.gpu?.memoryUtilization },
+  'gpu.encoderSessions': { group: 'GPU', label: 'Encoder sessions', unit: 'sessions', read: v => v.gpu?.encoderSessions },
+  'gpu.encoderFps': { group: 'GPU', label: 'Encoder average FPS', unit: 'fps', read: v => v.gpu?.encoderFps },
+  'gpu.encoderLatency': { group: 'GPU', label: 'Encoder average latency', unit: 'µs', read: v => v.gpu?.encoderLatency },
+  'cpu.vcore': { group: 'CPU', label: 'CPU core voltage', unit: 'V', read: v => v.board?.vcore },
+  'cpu.clockMax': { group: 'CPU', label: 'CPU peak thread clock', unit: 'MHz', read: v => v.cpu?.clockMax },
+  'cpu.load1': { group: 'CPU', label: 'Load average · 1 min', unit: '', read: v => v.cpu?.load?.[0] },
+  'cpu.load5': { group: 'CPU', label: 'Load average · 5 min', unit: '', read: v => v.cpu?.load?.[1] },
+  'cpu.load15': { group: 'CPU', label: 'Load average · 15 min', unit: '', read: v => v.cpu?.load?.[2] },
 };
+// Recorded for derived statistics (P-state time, throttle time, power-limit share);
+// not chartable on their own, so not exposed through /api/metrics.
+export const INTERNAL_METRICS = {
+  'gpu.pstate': v => { const m = /^P(\d{1,2})$/.exec(v.gpu?.pstate || ''); return m ? Number(m[1]) : null; },
+  'gpu.throttle': v => v.gpu?.throttle,
+  'gpu.powerLimit': v => v.gpu?.powerLimit,
+};
+
+/** CCDs in display order: sorted L3 IDs mapped to the Tccd sensor numbers. */
+export function ccdList(view) {
+  const threads = view?.cpu?.threads || [], l3 = [...new Set(threads.map(t => t.ccd))].filter(Number.isInteger).sort((a, b) => a - b);
+  return l3.map((id, i) => ({ n: view?.board?.ccds?.[i]?.id ?? i + 1, l3: id, temperature: view?.board?.ccds?.[i]?.temperature ?? null, threads: threads.filter(t => t.ccd === id) }));
+}
+const avg = list => { const v = list.filter(Number.isFinite); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
 
 /** Resolves an ID to its spec, or null. Sensor-backed IDs must be reported now or have stored samples. */
 export function metricSpec(id, view, known = () => false) {
   if (typeof id !== 'string' || !METRIC_ID.test(id)) return null;
   if (Object.hasOwn(STATIC_METRICS, id)) { const { read, legacy, ...spec } = STATIC_METRICS[id]; return { id, ...spec }; }
-  const ccd = id.match(/^cpu\.ccd\.(\d{1,2})$/);
-  if (ccd) { const n = Number(ccd[1]); return n >= 1 && n <= 16 && (view?.board?.ccds?.some(c => c.id === n) || known(id)) ? { id, group: 'CPU', label: `CCD ${n} temperature`, unit: '°C' } : null; }
+  const ccd = id.match(/^cpu\.ccd\.(\d{1,2})(?:\.(load|clock))?$/);
+  if (ccd) {
+    const n = Number(ccd[1]);
+    if (!(n >= 1 && n <= 16 && (ccdList(view).some(c => c.n === n) || view?.board?.ccds?.some(c => c.id === n) || known(id)))) return null;
+    return ccd[2] === 'load' ? { id, group: 'CPU', label: `CCD ${n} average load`, unit: '%', max: 100 } : ccd[2] === 'clock' ? { id, group: 'CPU', label: `CCD ${n} average clock`, unit: 'MHz' } : { id, group: 'CPU', label: `CCD ${n} temperature`, unit: '°C' };
+  }
+  const thread = id.match(/^cpu\.thread\.(\d{1,3})$/);
+  if (thread) { const n = Number(thread[1]); return n < 512 && (view?.cpu?.threads?.some(t => t.cpu === n) || known(id)) ? { id, group: 'CPU', label: `CPU ${n} load`, unit: '%', max: 100 } : null; }
+  const vramCt = id.match(/^gpu\.vram\.ct\.(\d{1,9})$/);
+  if (vramCt) { const ct = Number(vramCt[1]), p = view?.processes?.find(x => x.container === ct); return p || known(id) ? { id, group: 'GPU', label: `VRAM · CT ${ct}${p?.containerName ? ` ${p.containerName}` : ''}`, unit: 'GiB' } : null; }
   const sensor = id.match(/^board\.(fan|temp)\.([0-9a-f]{16})$/);
   if (sensor && SENSOR.test(sensor[2])) {
     const list = sensor[1] === 'fan' ? view?.board?.fans : view?.board?.temperatures, item = list?.find(x => x.id === sensor[2]);
@@ -46,7 +77,17 @@ export function metricValues(view) {
   if (!view || view.stale) return {};
   const out = {};
   for (const [id, m] of Object.entries(STATIC_METRICS)) { const v = m.read(view); if (Number.isFinite(v)) out[id] = v; }
+  for (const [id, read] of Object.entries(INTERNAL_METRICS)) { const v = read(view); if (Number.isFinite(v)) out[id] = v; }
   for (const c of view.board?.ccds || []) if (Number.isInteger(c.id) && Number.isFinite(c.temperature)) out[`cpu.ccd.${c.id}`] = c.temperature;
+  for (const c of ccdList(view)) {
+    const load = avg(c.threads.map(t => t.load)), clock = avg(c.threads.map(t => t.mhz));
+    if (Number.isFinite(load)) out[`cpu.ccd.${c.n}.load`] = load;
+    if (Number.isFinite(clock)) out[`cpu.ccd.${c.n}.clock`] = clock;
+  }
+  for (const t of view.cpu?.threads || []) if (Number.isInteger(t.cpu) && Number.isFinite(t.load)) out[`cpu.thread.${t.cpu}`] = t.load;
+  const perCt = {};
+  for (const p of view.processes || []) if (Number.isInteger(p.container) && Number.isFinite(p.memory)) perCt[p.container] = (perCt[p.container] || 0) + p.memory / 1024;
+  if (view.gpu) for (const [ct, gib] of Object.entries(perCt)) out[`gpu.vram.ct.${ct}`] = gib;
   for (const f of view.board?.fans || []) if (SENSOR.test(f.id) && Number.isFinite(f.rpm)) out[`board.fan.${f.id}`] = f.rpm;
   for (const t of view.board?.temperatures || []) if (SENSOR.test(t.id) && Number.isFinite(t.value)) out[`board.temp.${t.id}`] = t.value;
   return out;

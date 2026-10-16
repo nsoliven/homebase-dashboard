@@ -5,6 +5,7 @@ import { Badge, Dialog, Dot, Empty, Meter, Panel } from './components.jsx';
 import { useComputeLive, useNow } from './hooks.js';
 import { RefreshButton } from './refresh.jsx';
 import { BandChart, formatValue, useMetric } from './metrics.jsx';
+import { groupOf } from '../server/compute-groups.mjs';
 
 /* ---------- motion: one rAF loop, data-driven speeds, nothing decorative ---------- */
 // Visual speed is capped below the wagon-wheel threshold (blade pitch / frame),
@@ -116,11 +117,13 @@ function Marker({ n, x, y }) { return <g className="art-marker" transform={`tran
 function MetricLink({ id, onOpen, label, children, className = '' }) {
   return <button type="button" className={`metric-link ${className}`} onClick={e => { e.stopPropagation(); onOpen(id); }} aria-label={`${label}: view history`} title={`${label} · view 1 h / 24 h / 7 d history`}>{children}</button>;
 }
-function Callout({ spot, side, active, onHover, onOpen, register, children }) {
-  return <div className={`callout ${active ? 'is-active' : ''}`} data-side={side} ref={register}
+/** A side readout. Hover previews the part; a click anywhere on it opens the full detail. */
+function Callout({ spot, side, active, onHover, onDetails, register, children }) {
+  return <div className={`callout ${active ? 'is-active' : ''}`} data-side={side} ref={register} onClick={() => onDetails(spot)}
     onPointerEnter={e => e.pointerType === 'mouse' && onHover(spot.key)} onPointerLeave={e => e.pointerType === 'mouse' && onHover(null)}>
-    <button type="button" className="callout-head" data-spot={spot.key} aria-haspopup="dialog" onClick={e => onOpen(spot.key, e.currentTarget)} onFocus={() => onHover(spot.key)} onBlur={() => onHover(null)}>
-      <span className="callout-index">{spot.n}</span><span className="eyebrow">{spot.title}</span>
+    <button type="button" className="callout-head" aria-haspopup="dialog" aria-label={`${spot.title}: ${spot.value}. Open details`}
+      onClick={e => { e.stopPropagation(); onDetails(spot); }} onFocus={() => onHover(spot.key)} onBlur={() => onHover(null)}>
+      <span className="callout-index">{spot.n}</span><span className="eyebrow">{spot.title}</span><span className="callout-more">Details<ChevronRight size={11} /></span>
     </button>{children}</div>;
 }
 function Overlay({ box, spots, active, open, popId, onHover, onOpen }) {
@@ -141,7 +144,8 @@ function Overlay({ box, spots, active, open, popId, onHover, onOpen }) {
   </g>;
 }
 const focusables = el => [...el.querySelectorAll('button, [href], [tabindex]:not([tabindex="-1"])')].filter(x => !x.disabled);
-const SpotPopover = React.forwardRef(function SpotPopover({ spot, id, style, close, openMetric }, ref) {
+const SpotPopover = React.forwardRef(function SpotPopover({ spot, id, style, close, openGroup }, ref) {
+  const openMetric = metric => openGroup(spot.group, metric);
   const titleId = useId(), primary = spot.metrics[0], history = useMetric(primary?.id, '1h', Boolean(primary));
   return <div className="spot-pop" id={id} role="dialog" aria-modal="false" aria-labelledby={titleId} ref={ref} style={style}
     onKeyDown={e => {
@@ -156,7 +160,7 @@ const SpotPopover = React.forwardRef(function SpotPopover({ spot, id, style, clo
     {spot.detail && <p>{spot.detail}</p>}
     {primary && <div className="spot-pop-trend"><span>{primary.label} · last hour</span><BandChart data={history.data} height={46} compact /></div>}
     {spot.metrics.length > 1 && <div className="spot-pop-metrics">{spot.metrics.map(m => <button type="button" key={m.id} onClick={() => openMetric(m.id)}><span>{m.label}</span><strong>{m.value}</strong><ChevronRight size={13} /></button>)}</div>}
-    {primary ? <button type="button" className="primary-button spot-pop-action" onClick={() => openMetric(primary.id)}><History size={14} />View history</button> : <p className="muted-inline">No numeric history for this part.</p>}
+    <button type="button" className="primary-button spot-pop-action" onClick={() => openMetric(primary?.id)}><History size={14} />Open details</button>
   </div>;
 });
 
@@ -172,11 +176,11 @@ function Leaders({ lines, active, popLine }) {
  * Any width: hover/focus previews a part, tap/click/Enter opens a popover that
  * spotlights it; Esc, outside tap, or a second tap closes and returns focus.
  */
-function Stage({ className, box, spots, art, left, right, deps, openMetric }) {
+function Stage({ className, box, spots, art, left, right, openGroup }) {
   const stage = useRef(null), artRef = useRef(null), pop = useRef(null), trigger = useRef(null), callouts = useRef({});
   const popId = useId(), [hover, setHover] = useState(null), [open, setOpen] = useState(null), [pos, setPosState] = useState(null);
   const [lines, setLinesState] = useState([]), [popLine, setPopLineState] = useState(null);
-  const active = open ?? hover, spotsRef = useRef(spots);
+  const active = open ?? hover, spotsRef = useRef(spots), wideRef = useRef(false);
   spotsRef.current = spots;
   // Layout effects run every render; only commit geometry that actually changed.
   const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -189,6 +193,7 @@ function Stage({ className, box, spots, art, left, right, deps, openMetric }) {
     const s = st.getBoundingClientRect(), r = a.getBoundingClientRect();
     const point = ([ax, ay]) => [r.left - s.left + ax / box[0] * r.width, r.top - s.top + ay / box[1] * r.height];
     const wide = getComputedStyle(st).getPropertyValue('--leaders').trim() === '1';
+    wideRef.current = wide;
     setLines(wide ? spots.flatMap(spot => {
       const el = callouts.current[spot.key]; if (!el) return [];
       const c = el.getBoundingClientRect(), side = el.dataset.side, head = el.querySelector('.callout-head').getBoundingClientRect();
@@ -212,7 +217,9 @@ function Stage({ className, box, spots, art, left, right, deps, openMetric }) {
     return () => observer.disconnect();
   }, [measure]);
   const close = useCallback(returnFocus => { setOpen(null); setHover(null); if (returnFocus) trigger.current?.focus({ preventScroll: true }); }, []);
-  const openSpot = useCallback((key, el) => { if (open === key) { close(true); return; } trigger.current = el; setOpen(key); }, [open, close]);
+  const details = useCallback(spot => { setOpen(null); openGroup(spot.group, spot.metrics[0]?.id); }, [openGroup]);
+  // Wide layouts (readouts visible) open the full detail; compact layouts pop a summary first.
+  const openSpot = useCallback((key, el) => { if (wideRef.current) { details(spotsRef.current.find(s => s.key === key)); return; } if (open === key) { close(true); return; } trigger.current = el; setOpen(key); }, [open, close, details]);
   useEffect(() => {
     if (!open) return;
     const outside = e => { if (pop.current?.contains(e.target) || e.target.closest?.(`[data-spot="${open}"]`)) return; close(false); };
@@ -221,7 +228,7 @@ function Stage({ className, box, spots, art, left, right, deps, openMetric }) {
     return () => { document.removeEventListener('pointerdown', outside); document.removeEventListener('keydown', escape); };
   }, [open, close]);
   useEffect(() => { if (open && pos && pop.current && !pop.current.contains(document.activeElement)) focusables(pop.current)[0]?.focus({ preventScroll: true }); }, [open, pos]);
-  const props = key => ({ spot: spots.find(s => s.key === key), active: active === key, onHover: setHover, onOpen: openSpot, register: el => { callouts.current[key] = el; } });
+  const props = key => ({ spot: spots.find(s => s.key === key), active: active === key, onHover: setHover, onDetails: details, register: el => { callouts.current[key] = el; } });
   const overlay = <Overlay box={box} spots={spots} active={active} open={open} popId={popId} onHover={setHover} onOpen={openSpot} />;
   const spot = spots.find(s => s.key === open);
   return <div className={`compute-stage ${className} ${active ? 'has-active' : ''}`} ref={stage}>
@@ -229,7 +236,7 @@ function Stage({ className, box, spots, art, left, right, deps, openMetric }) {
     <div className="stage-art">{art(artRef, overlay)}</div>
     <div className="callout-column right">{right(props)}</div>
     <Leaders lines={lines} active={active} popLine={popLine} />
-    {spot && <SpotPopover ref={pop} id={popId} spot={spot} close={close} openMetric={id => { close(false); openMetric(id); }} style={pos ? { left: pos.left, top: pos.top, width: pos.width } : { left: 8, top: 0, visibility: 'hidden' }} />}
+    {spot && <SpotPopover ref={pop} id={popId} spot={spot} close={close} openGroup={(g, m) => { close(false); openGroup(g, m); }} style={pos ? { left: pos.left, top: pos.top, width: pos.width } : { left: 8, top: 0, visibility: 'hidden' }} />}
   </div>;
 }
 
@@ -306,29 +313,29 @@ function gpuSpots(g) {
   const mem = g.memoryTotal > 0 ? g.memoryUsed / g.memoryTotal * 100 : null;
   const m = (id, label, value) => ({ id, label, value });
   return [
-    { key: 'cooling', n: 2, title: 'Cooling', anchor: [132, 116], hit: [{ circle: [132, 116, 74] }, { circle: [394, 116, 74] }], glow: [{ circle: [132, 116, 75] }, { circle: [394, 116, 75] }],
+    { key: 'cooling', group: 'gpu.cooling', n: 2, title: 'Cooling', anchor: [132, 116], hit: [{ circle: [132, 116, 74] }, { circle: [394, 116, 74] }], glow: [{ circle: [132, 116, 75] }, { circle: [394, 116, 75] }],
       value: `${fmt(g.fan, 0)}% fan`, detail: g.fan === 0 ? 'Zero-RPM mode · fans stopped' : 'Fan duty target from the driver', metrics: [m('gpu.fan', 'Fan duty', formatValue(g.fan, '%'))] },
-    { key: 'memory', n: 1, title: 'Video memory', anchor: [228, 60], hit: [{ rect: [206, 26, 114, 64] }], glow: [{ rect: [206, 26, 114, 66, 4] }],
+    { key: 'memory', group: 'gpu.memory', n: 1, title: 'Video memory', anchor: [228, 60], hit: [{ rect: [206, 26, 114, 64] }], glow: [{ rect: [206, 26, 114, 66, 4] }],
       value: `${fmt(gib(g.memoryUsed))} / ${fmt(gib(g.memoryTotal), 0)} GiB`, detail: `${fmt(g.memoryClock, 0)} MHz memory clock`, metrics: [m('gpu.memory', 'VRAM used', formatValue(mem, '%')), m('gpu.memoryClock', 'Memory clock', formatValue(g.memoryClock, 'MHz'))] },
-    { key: 'core', n: 5, title: 'Core', anchor: [263, 132], hit: [{ rect: [214, 92, 98, 48] }], glow: [{ rect: [212, 92, 102, 48, 6] }],
+    { key: 'core', group: 'gpu.core', n: 5, title: 'Core', anchor: [263, 132], hit: [{ rect: [214, 92, 98, 48] }], glow: [{ rect: [212, 92, 102, 48, 6] }],
       value: `${fmt(g.temperature, 0)}°C · ${fmt(g.utilization, 0)}% load`, detail: `${fmt(g.coreClock, 0)} MHz core clock`,
       metrics: [m('gpu.temperature', 'Temperature', formatValue(g.temperature, '°C')), m('gpu.utilization', 'Load', formatValue(g.utilization, '%')), m('gpu.coreClock', 'Core clock', formatValue(g.coreClock, 'MHz'))] },
-    { key: 'video', n: 6, title: 'Video engines', anchor: [304, 190], hit: [{ rect: [206, 142, 114, 62] }], glow: [{ rect: [206, 140, 114, 64, 4] }],
+    { key: 'video', group: 'gpu.video', n: 6, title: 'Video engines', anchor: [304, 190], hit: [{ rect: [206, 142, 114, 62] }], glow: [{ rect: [206, 140, 114, 64, 4] }],
       value: `${fmt(g.encoder, 0)}% enc · ${fmt(g.decoder, 0)}% dec`, detail: 'NVENC / NVDEC utilization', metrics: [m('gpu.encoder', 'Encoder', formatValue(g.encoder, '%')), m('gpu.decoder', 'Decoder', formatValue(g.decoder, '%'))] },
-    { key: 'state', n: 3, title: 'State & link', anchor: [11, 172], hit: [{ rect: [0, 8, 24, 216] }, { rect: [66, 206, 198, 18] }], glow: [{ rect: [2, 10, 19, 212, 4] }, { rect: [68, 209, 194, 14, 3] }],
+    { key: 'state', group: 'gpu.state', n: 3, title: 'State & link', anchor: [11, 172], hit: [{ rect: [0, 8, 24, 216] }, { rect: [66, 206, 198, 18] }], glow: [{ rect: [2, 10, 19, 212, 4] }, { rect: [68, 209, 194, 14, 3] }],
       value: `${g.pstate || '—'} · ${isNumber(g.pcieGen) ? `PCIe Gen ${fmt(g.pcieGen, 0)} ×${fmt(g.pcieWidth, 0)}` : 'link not reported'}`, detail: throttleText(g.throttle),
       metrics: [m('gpu.coreClock', 'Core clock', formatValue(g.coreClock, 'MHz')), m('gpu.memoryClock', 'Memory clock', formatValue(g.memoryClock, 'MHz'))] },
-    { key: 'power', n: 4, title: 'Board power', anchor: [316, 13], hit: [{ rect: [290, 2, 52, 22] }], glow: [{ rect: [294, 5, 44, 18, 4] }, { rect: [172, 15, 182, 7, 3] }],
+    { key: 'power', group: 'gpu.power', n: 4, title: 'Board power', anchor: [316, 13], hit: [{ rect: [290, 2, 52, 22] }], glow: [{ rect: [294, 5, 44, 18, 4] }, { rect: [172, 15, 182, 7, 3] }],
       value: `${fmt(g.powerDraw)} W of ${fmt(g.powerLimit, 0)} W`, detail: isNumber(g.powerLimit) && g.powerLimit > 0 ? `${fmt(g.powerDraw / g.powerLimit * 100, 0)}% of the power limit` : null, metrics: [m('gpu.power', 'Board power', formatValue(g.powerDraw, 'W'))] },
   ];
 }
 
-function GpuStage({ c, series, animate, openMetric }) {
+function GpuStage({ c, series, animate, openMetric, openGroup }) {
   const g = c.gpu;
   if (!g) return <Empty icon={Gpu} title="GPU readings unavailable" text={c.gpuError === 'unreadable' ? 'nvidia-smi answered in an unexpected format. No values are guessed.' : 'nvidia-smi did not answer on the host. The card may be passed through to a VM or its driver may be unloaded.'} />;
   const memoryPct = g.memoryTotal > 0 ? g.memoryUsed / g.memoryTotal * 100 : null, powerPct = g.powerLimit > 0 ? g.powerDraw / g.powerLimit * 100 : null;
   const spots = gpuSpots(g), go = openMetric;
-  return <Stage className="gpu-stage" box={GPU_BOX} spots={spots} deps={[c.observedAt, series.length]} openMetric={openMetric}
+  return <Stage className="gpu-stage" box={GPU_BOX} spots={spots} openGroup={openGroup}
     art={(ref, overlay) => <GpuArt gpu={g} artRef={ref} animate={animate} overlay={overlay} />}
     left={p => <>
       <Callout {...p('memory')} side="left"><MetricLink id="gpu.memory" label="Video memory used" onOpen={go} className="callout-value"><strong>{fmt(gib(g.memoryUsed))}</strong><small> / {fmt(gib(g.memoryTotal), 0)} GiB</small></MetricLink><Meter value={memoryPct} label="GPU memory used" /><p><MetricLink id="gpu.memoryClock" label="GPU memory clock" onOpen={go}>{fmt(g.memoryClock, 0)} MHz</MetricLink>{isNumber(g.memoryUtilization) ? ` · bus ${fmt(g.memoryUtilization, 0)}% busy` : ''}<br />{isNumber(g.memoryTemperature) ? `Memory ${fmt(g.memoryTemperature, 0)}°C` : 'Memory temperature not reported'}</p></Callout>
@@ -383,29 +390,29 @@ function CpuArt({ cpu, board, artRef, overlay }) {
   </svg>;
 }
 
-function CpuStage({ c, series, thermalLimit, openMetric }) {
+function CpuStage({ c, series, thermalLimit, openMetric, openGroup }) {
   const cpu = c.cpu || {}, b = c.board || {}, threads = cpu.threads || [];
   const ccdIds = [...new Set(threads.map(t => t.ccd))].filter(isNumber).sort((x, y) => x - y);
   const ccd = i => { const list = threads.filter(t => t.ccd === ccdIds[i]), loads = list.map(t => t.load).filter(isNumber), mhz = list.map(t => t.mhz).filter(isNumber); return { id: b.ccds?.[i]?.id ?? i + 1, cores: new Set(list.map(t => t.core)).size, load: loads.length ? loads.reduce((a, v) => a + v, 0) / loads.length : null, mhz: mhz.length ? mhz.reduce((a, v) => a + v, 0) / mhz.length : null, temperature: b.ccds?.[i]?.temperature ?? null }; };
   const temps = b.temperatures || [], byName = Object.fromEntries(temps.map(t => [t.name, t])), vrm = byName['VRM MOS'] || temps[0];
   const go = openMetric, m = (id, label, value) => ({ id, label, value });
-  const ccdSpot = (i, key, n, x) => { const d = ccd(i); return { key, n, title: `CCD ${i + 1}`, anchor: [x + 60, 104], hit: [{ rect: [x, 36, 120, 128] }], glow: [{ rect: [x - 2, 34, 124, 132, 8] }],
+  const ccdSpot = (i, key, n, x) => { const d = ccd(i); return { key, group: `cpu.ccd.${d.id}`, n, title: `CCD ${i + 1}`, anchor: [x + 60, 104], hit: [{ rect: [x, 36, 120, 128] }], glow: [{ rect: [x - 2, 34, 124, 132, 8] }],
     value: `${fmt(d.temperature)}°C`, detail: `${d.cores || '—'} cores · ${isNumber(d.load) ? `${fmt(d.load, 0)}% avg load` : 'measuring load'}`, metrics: [m(`cpu.ccd.${d.id}`, `CCD ${i + 1} temperature`, formatValue(d.temperature, '°C'))] }; };
   const spots = [
-    { key: 'package', n: 2, title: 'Package · Tctl', anchor: [180, 181], hit: [{ rect: [20, 14, 320, 272, 12] }], glow: [{ rect: [20, 14, 320, 272, 12] }],
+    { key: 'package', group: 'cpu.package', n: 2, title: 'Package · Tctl', anchor: [180, 181], hit: [{ rect: [20, 14, 320, 272, 12] }], glow: [{ rect: [20, 14, 320, 272, 12] }],
       value: `${fmt(b.tctl)}°C`, detail: [thermalLimit ? `${thermalLimit}°C rated limit` : null, isNumber(cpu.power) ? `${fmt(cpu.power, 0)} W package` : null].filter(Boolean).join(' · '),
       metrics: [m('cpu.tctl', 'Tctl', formatValue(b.tctl, '°C')), m('cpu.power', 'Package power', formatValue(cpu.power, 'W'))] },
     ccdSpot(0, 'ccd0', 1, 52), ccdSpot(1, 'ccd1', 5, 188),
-    { key: 'clocks', n: 3, title: 'Clocks', anchor: [120, 228], hit: [{ rect: [96, 194, 168, 72] }], glow: [{ rect: [94, 192, 172, 76, 8] }],
+    { key: 'clocks', group: 'cpu.clocks', n: 3, title: 'Clocks', anchor: [120, 228], hit: [{ rect: [96, 194, 168, 72] }], glow: [{ rect: [94, 192, 172, 76, 8] }],
       value: `${fmt(cpu.clockAverage, 0)} MHz avg`, detail: `Peak thread ${fmt(cpu.clockMax, 0)} MHz`, metrics: [m('cpu.clock', 'Average clock', formatValue(cpu.clockAverage, 'MHz'))] },
-    { key: 'load', n: 4, title: 'Utilization', anchor: [296, 60], hit: [], glow: [{ rect: [50, 34, 124, 132, 8] }, { rect: [186, 34, 124, 132, 8] }],
+    { key: 'load', group: 'cpu.utilization', n: 4, title: 'Utilization', anchor: [296, 60], hit: [], glow: [{ rect: [50, 34, 124, 132, 8] }, { rect: [186, 34, 124, 132, 8] }],
       value: `${fmt(cpu.utilization, 0)}%`, detail: cpu.load ? `Load average ${cpu.load.map(v => fmt(v, 2)).join(' · ')}` : null, metrics: [m('cpu.utilization', 'Utilization', formatValue(cpu.utilization, '%'))] },
-    { key: 'board', n: 6, title: 'Board', anchor: [334, 278], hit: [], glow: CAPS.map(([x, y, w, h]) => ({ rect: [x, y, w, h, 3] })),
+    { key: 'board', group: 'cpu.board', n: 6, title: 'Board', anchor: [334, 278], hit: [], glow: CAPS.map(([x, y, w, h]) => ({ rect: [x, y, w, h, 3] })),
       value: vrm ? `${fmt(vrm.value)}°C ${vrm.name === 'VRM MOS' ? 'VRM' : vrm.name}` : 'Not reported', detail: b.name || 'Motherboard sensors',
       metrics: temps.map(t => m(`board.temp.${t.id}`, t.name, formatValue(t.value, '°C'))) },
   ];
   const ccdCallout = (i, p, side) => { const d = ccd(i); return <Callout {...p(i ? 'ccd1' : 'ccd0')} side={side}><MetricLink id={`cpu.ccd.${d.id}`} label={`CCD ${i + 1} temperature`} onOpen={go} className="callout-value"><strong>{fmt(d.temperature)}</strong><small>°C</small></MetricLink><p>{d.cores ? `${d.cores} cores` : 'No cores reported'} · {isNumber(d.load) ? `${fmt(d.load, 0)}% avg load` : 'measuring load'}<br />{isNumber(d.mhz) ? `${fmt(d.mhz, 0)} MHz average` : 'Clock not reported'}</p></Callout>; };
-  return <Stage className="cpu-stage" box={CPU_BOX} spots={spots} deps={[c.observedAt, series.length]} openMetric={openMetric}
+  return <Stage className="cpu-stage" box={CPU_BOX} spots={spots} openGroup={openGroup}
     art={(ref, overlay) => <CpuArt cpu={cpu} board={b} artRef={ref} overlay={overlay} />}
     left={p => <>
       {ccdCallout(0, p, 'left')}
@@ -419,9 +426,9 @@ function CpuStage({ c, series, thermalLimit, openMetric }) {
     </>} />;
 }
 
-function Processes({ processes }) {
+function Processes({ processes, onOpen }) {
   return <div className="gpu-processes"><span className="eyebrow"><Boxes size={12} /> Using the GPU</span>
-    {processes.length ? processes.map(p => <span className="process-chip" key={p.pid}><strong>{p.name}</strong><small>{p.container ? `CT ${p.container}${p.containerName ? ` · ${p.containerName}` : ''}` : 'host'} · {isNumber(p.memory) ? `${fmt(p.memory / 1024)} GiB` : 'memory n/a'}</small></span>)
+    {processes.length ? processes.map(p => <button type="button" className="process-chip" key={p.pid} onClick={() => onOpen?.(p.container ? `gpu.vram.ct.${p.container}` : null)}><strong>{p.name}</strong><small>{p.container ? `CT ${p.container}${p.containerName ? ` · ${p.containerName}` : ''}` : 'host'} · {isNumber(p.memory) ? `${fmt(p.memory / 1024)} GiB` : 'memory n/a'}</small></button>)
       : <span className="process-none">No compute processes right now</span>}</div>;
 }
 function BoardFans({ fans, animate, openMetric }) {
@@ -442,19 +449,19 @@ export function ComputeShowcase({ snapshot, open, thermalLimit }) {
   const [live] = useComputeLive(visible && Boolean(snapshot.refresh?.compute || snapshot.compute));
   const c = live.compute || snapshot.compute, series = live.series || [];
   const status = liveState(c, now), animate = visible && !c?.stale;
-  const source = snapshot.sources.find(s => s.id === 'compute'), openMetric = id => open({ type: 'metric', id });
+  const source = snapshot.sources.find(s => s.id === 'compute'), openGroup = (group, metric) => group && open({ type: 'group', group, metric }), openMetric = id => openGroup(groupOf(id, c), id);
   return <div ref={root} className="showcase-wrap"><Panel id="showcase" title="GPU & CPU" icon={Microchip} className="showcase-panel"
     action={<div className="showcase-actions"><Badge tone={status.tone === 'green' ? 'success' : status.tone === 'amber' ? 'warning' : 'neutral'}><Dot tone={status.tone} />{status.label}</Badge><button className="text-button" onClick={() => open({ type: 'compute' })}>Details <ArrowUpRight size={14} /></button></div>}
     refresh={<RefreshButton sources={['compute']} label="Refresh GPU and CPU readings" />}>
     {!c ? <Empty icon={Gpu} title="GPU & CPU telemetry is not connected" text={source?.message || 'The bridge sends readings from the hypervisor once the compute collector is enabled.'} /> : <>
       <section className="showcase-section" aria-label="Graphics card">
         <div className="showcase-heading"><div><span className="eyebrow">Graphics · {c.processes?.[0]?.containerName ? `shared with ${c.processes[0].containerName}` : 'hypervisor host'}</span><h3>{shortGpu(c.gpu?.name)}</h3></div><span className="showcase-observed">Observed {age(c.observedAt)}{c.gpu?.driver ? ` · driver ${c.gpu.driver}` : ''}</span></div>
-        <GpuStage c={c} series={series} animate={animate} openMetric={openMetric} />
-        {c.gpu && <Processes processes={c.processes || []} />}
+        <GpuStage c={c} series={series} animate={animate} openMetric={openMetric} openGroup={openGroup} />
+        {c.gpu && <Processes processes={c.processes || []} onOpen={metric => openGroup("gpu.processes", metric)} />}
       </section>
       <section className="showcase-section" aria-label="Processor">
         <div className="showcase-heading"><div><span className="eyebrow">Processor · per-thread load</span><h3>{shortCpu(c.cpu?.model)}</h3></div><span className="heat-legend" aria-label="Thread load scale from 0 to 100 percent"><small>0%</small><i /><small>100%</small></span></div>
-        <CpuStage c={c} series={series} thermalLimit={thermalLimit} openMetric={openMetric} />
+        <CpuStage c={c} series={series} thermalLimit={thermalLimit} openMetric={openMetric} openGroup={openGroup} />
         <BoardFans fans={c.board?.fans || []} animate={animate} openMetric={openMetric} />
       </section>
       <div className="panel-footnote"><span>{status.label === 'Live' ? 'Collecting every 3 s while this panel is visible' : 'Collected every 30 s in the background'}</span><span>Tap a part or a reading for its history</span></div>
@@ -466,7 +473,7 @@ export function ComputeShowcase({ snapshot, open, thermalLimit }) {
 export function ComputeDetail({ snapshot, close, thermalLimit, open }) {
   const [live] = useComputeLive(true); useNow(1000);
   const c = live.compute || snapshot.compute, series = live.series || [], g = c?.gpu, cpu = c?.cpu || {}, b = c?.board || {};
-  const openMetric = id => open({ type: 'metric', id, from: 'compute' });
+  const openMetric = id => open({ type: 'group', group: groupOf(id, c), metric: id, from: 'compute' });
   const row = (label, value, id) => <React.Fragment key={label}><span>{id ? <button type="button" className="metric-link spec-link" onClick={() => openMetric(id)}>{label}<History size={11} /></button> : label}</span><strong>{value}</strong></React.Fragment>;
   return <Dialog title="GPU & CPU" close={close} actions={<RefreshButton sources={['compute']} label="Refresh GPU and CPU readings" showStatus />}>
     {!c ? <Empty icon={Gpu} title="GPU & CPU telemetry is not connected" /> : <>
@@ -487,7 +494,7 @@ export function ComputeDetail({ snapshot, close, thermalLimit, open }) {
             row('PCIe link', isNumber(g.pcieGen) ? `Gen ${fmt(g.pcieGen, 0)} ×${fmt(g.pcieWidth, 0)}` : 'Not reported'),
             row('Driver', g.driver || '—'),
           ]}</div>
-          <Processes processes={c.processes || []} /></> : <Empty title="GPU readings unavailable" />}
+          <Processes processes={c.processes || []} onOpen={metric => open({ type: "group", group: "gpu.processes", metric, from: "compute" })} /></> : <Empty title="GPU readings unavailable" />}
       </section>
       <section className="detail-section"><div className="detail-section-heading"><Microchip size={16} /><h3>{shortCpu(cpu.model)}</h3><span>/proc · hwmon</span></div>
         <div className="trend-grid">{[['cpuTemperature', 'Package Tctl', '°C', undefined, 'cpu.tctl'], ['cpuUtilization', 'Utilization', '%', 100, 'cpu.utilization']].map(([k, label, unit, max, id]) => <button type="button" key={k} onClick={() => openMetric(id)}><span>{label}</span><Sparkline series={series} k={k} unit={unit} max={max} width={220} height={44} label={label} stretch /></button>)}</div>
