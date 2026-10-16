@@ -9,6 +9,14 @@ export function validFanRequest(body) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return null;
   if ('mode' in body) return ['curves', 'bios'].includes(body.mode) ? { mode: body.mode } : null;
   if ('pulse' in body) return FAN_GROUPS.includes(body.pulse) ? { pulse: body.pulse } : null;
+  if ('release' in body) return FAN_GROUPS.includes(body.release) ? { release: body.release } : null;
+  if ('hold' in body) {
+    const { hold, duty, seconds } = body, num = v => typeof v === 'number' && Number.isFinite(v);
+    if (!FAN_GROUPS.includes(hold) || !num(duty) || duty < 0 || duty > 100) return null;
+    if (seconds !== null && (!num(seconds) || seconds < 1 || seconds > 86400)) return null;
+    if (duty > 60 && (seconds === null || seconds > 10)) return null;   // the noise rule: above 60% for 10 s at most
+    return { hold, duty: Math.round(duty), seconds: seconds === null ? null : Math.round(seconds) };
+  }
   const { group, curve } = body;
   if (!FAN_GROUPS.includes(group) || !Array.isArray(curve) || curve.length < 2 || curve.length > 8) return null;
   const num = v => typeof v === 'number' && Number.isFinite(v);

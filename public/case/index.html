@@ -75,6 +75,17 @@ html.embed #view{height:clamp(460px,calc(var(--host-vh,900px) * .74),900px);back
 .chip.running{position:relative;overflow:hidden;color:var(--fg);border-color:var(--accent);cursor:progress;opacity:1}
 .chip.running::after{content:'';position:absolute;left:0;bottom:0;height:100%;width:0;background:var(--glass);animation:fill var(--dur,4s) linear forwards;pointer-events:none}
 @keyframes fill{to{width:100%}}
+.grp .duty{position:relative;overflow:visible}
+.grp .duty em{position:absolute;top:-3px;width:2px;height:9px;margin-left:-1px;background:var(--fg);border-radius:1px}
+.savebar{display:flex;align-items:center;justify-content:flex-end;gap:8px;margin-top:8px;font-size:12px;color:var(--warm)}
+.savebar span{margin-right:auto}
+.btn{font:600 12.5px var(--font-ui);border-radius:9px;padding:7px 14px;border:1px solid var(--accent);background:var(--accent);color:#0b0d12;cursor:pointer}
+.hold{display:flex;flex-direction:column;gap:8px;margin-top:14px;padding-top:12px;border-top:1px solid var(--line);position:relative}
+.hold input[type=range]{width:100%;accent-color:var(--accent)}
+.hold .chips{margin:0}
+.hold-btn{position:relative;width:100%}
+.hold-btn.running{background:var(--glass);color:var(--fg)}
+.hold-bar{display:block;height:3px;border-radius:2px;background:var(--accent);margin-top:-6px;transition:width .25s linear}
 .apply{font-size:12px;color:var(--muted);margin-top:6px}
 .apply.ok{color:var(--ok)}
 .apply.bad{color:var(--bad)}
@@ -151,7 +162,15 @@ html.embed #view{height:clamp(460px,calc(var(--host-vh,900px) * .74),900px);back
         <div class="chips" id="dir-row" role="group" aria-label="Rear fan direction" hidden><button class="chip" id="dir-in" aria-pressed="true">Intake</button><button class="chip" id="dir-out" aria-pressed="false">Exhaust</button></div>
         <div class="chips" role="group" aria-label="Curve presets"><button class="chip" data-preset="silent" aria-pressed="false">Silent</button><button class="chip" data-preset="bios" aria-pressed="true">Your BIOS</button><button class="chip" data-preset="cool" aria-pressed="false">Cold</button><button class="chip" id="identify" hidden title="Spin this group to 100% for 4 s while every other group stops (never the pump), so you can see which fans it drives">Identify</button></div>
         <div class="curve" title="Temperature → fan duty. Drag a point to shape the curve."><svg id="curve" viewBox="0 0 360 220" role="img" aria-label="Fan curve editor"></svg></div>
+        <div class="savebar" id="savebar" hidden><span>Unsaved curve</span><button class="chip" id="revert">Revert</button><button class="btn" id="save">Save</button></div>
         <div class="apply" id="apply-state" role="status" hidden></div>
+        <div class="hold" id="hold-box" hidden>
+          <div class="sec-h"><span>Hold speed</span><span id="hold-val">50%</span></div>
+          <input type="range" id="hold-duty" min="0" max="100" step="5" value="50" aria-label="Hold speed">
+          <div class="chips" id="hold-times" role="group" aria-label="Hold for"><button class="chip" data-s="10">10 s</button><button class="chip" data-s="30">30 s</button><button class="chip" data-s="60" aria-pressed="true">1 min</button><button class="chip" data-s="300">5 min</button><button class="chip" data-s="900">15 min</button><button class="chip" data-s="hold">Until released</button></div>
+          <button class="btn hold-btn" id="hold-btn">Hold 50%</button><i class="hold-bar" id="hold-bar" hidden></i>
+          <div class="muted" id="hold-hint"></div>
+        </div>
       </div>
       <div title="Estimated from fan RPM and size; radiators restrict about 35%. More intake than exhaust keeps dust out.">
         <div class="sec-h"><span>Airflow</span><span class="tag" id="press">Balanced</span></div>

@@ -713,7 +713,7 @@ requestAnimationFrame(frame);
 /* fan group list: one row per group; details live in the hover title */
 const groupsEl=document.getElementById('groups');
 const rowTitle=k=>{const g=GROUPS[k],hs=HEADERS.filter(h=>h.group===k).map(h=>h.id);return [g.count,g.dir,g.readonly?'Set by the NVIDIA driver':hs.length?'Header '+hs.join(' + '):''].filter(Boolean).join(' · ')};
-groupsEl.innerHTML=Object.entries(GROUPS).map(([k,g])=>`<button class="grp" role="option" data-g="${k}" aria-selected="false"><i style="background:${g.color}"></i><span class="name">${g.name}</span><span class="rpm">${g.readonly?'auto':rpmOf(k).toLocaleString()}</span><span class="duty" aria-hidden="true"><b style="width:${g.duty}%;background:${g.color}"></b></span></button>`).join('');
+groupsEl.innerHTML=Object.entries(GROUPS).map(([k,g])=>`<button class="grp" role="option" data-g="${k}" aria-selected="false"><i style="background:${g.color}"></i><span class="name">${g.name}</span><span class="rpm">${g.readonly?'auto':rpmOf(k).toLocaleString()}</span><span class="duty" aria-hidden="true"><b style="width:${g.duty}%;background:${g.color}"></b><em style="left:${g.duty}%" hidden></em></span></button>`).join('');
 const groupEls=[...groupsEl.querySelectorAll('.grp')];
 groupEls.forEach(b=>b.onclick=()=>select(b.dataset.g));
 
@@ -747,7 +747,8 @@ function drawCurve(){
   s+=`<path d="M${poly.map(p=>sx(p[0])+','+sy(p[1])).join(' L')} L${X1},${Y0} L${X0},${Y0} Z" fill="${g.color}" opacity=".12"></path>`;
   s+=`<polyline points="${poly.map(p=>sx(p[0])+','+sy(p[1])).join(' ')}" fill="none" stroke="${g.color}" stroke-width="2.5" stroke-linejoin="round"></polyline>`;
   const now=Math.max(TMIN,Math.min(TMAX,g.temp));
-  s+=`<line x1="${sx(now)}" x2="${sx(now)}" y1="${Y1}" y2="${Y0}" stroke="var(--fg)" stroke-dasharray="3 3" opacity=".5"></line><circle cx="${sx(now)}" cy="${sy(g.duty)}" r="5" fill="var(--fg)"></circle><text x="${sx(now)+7}" y="${sy(g.duty)-8}" fill="var(--fg)" font-size="11" font-family="JetBrains Mono, monospace">now ${g.temp}° · ${g.duty}%</text>`;
+  s+=`<line x1="${sx(now)}" x2="${sx(now)}" y1="${Y1}" y2="${Y0}" stroke="var(--fg)" stroke-dasharray="3 3" opacity=".5"></line><circle cx="${sx(now)}" cy="${sy(g.duty)}" r="5" fill="${g.color}" stroke="var(--fg)" stroke-width="1.5"></circle><text x="${sx(now)+8}" y="${sy(g.duty)-8}" fill="var(--fg)" font-size="11" font-family="JetBrains Mono, monospace">${g.held?'held':'target'} ${g.duty}% · ${g.temp}°</text>`;
+  if(g.actual!=null&&!g.readonly)s+=`<circle cx="${sx(now)}" cy="${sy(g.actual)}" r="5" fill="none" stroke="var(--fg)" stroke-width="1.5" stroke-dasharray="2 2"></circle><text x="${sx(now)-8}" y="${sy(g.actual)+(g.actual<g.duty?14:-8)}" text-anchor="end" fill="var(--muted)" font-size="11" font-family="JetBrains Mono, monospace">actual ${g.actual}%</text>`;   // left of the line, so it never collides with the target label
   if(!ro)pts.forEach((p,i)=>{s+=`<circle class="pt" data-i="${i}" cx="${sx(p[0])}" cy="${sy(p[1])}" r="7" fill="var(--surface)" stroke="${g.color}" stroke-width="2.5" tabindex="0" aria-label="Point ${i+1}: ${p[0]} degrees, ${p[1]} percent"></circle>`});
   if(ro)s+=`<text x="${(X0+X1)/2}" y="${Y1+22}" fill="var(--muted)" font-size="12" text-anchor="middle">${g.readonly?'Set by the NVIDIA driver; shown for reference':'Pump runs flat out; leave it'}</text>`;
   svg.innerHTML=s;
@@ -758,29 +759,30 @@ svg.addEventListener('pointermove',e=>{if(drag===null)return;const r=svg.getBoun
   const lo=drag?pts[drag-1][0]+2:TMIN,hi=drag<pts.length-1?pts[drag+1][0]-2:TMAX;
   pts[drag]=[Math.round(Math.max(lo,Math.min(hi,it(x)))),Math.round(Math.max(0,Math.min(100,id_(y))))];
   document.querySelectorAll('[data-preset]').forEach(b=>b.setAttribute('aria-pressed','false'));drawCurve()});
-svg.addEventListener('pointerup',()=>{if(drag!==null)sendCurve(sel);drag=null});
+svg.addEventListener('pointerup',()=>{if(drag!==null)markDirty(sel);drag=null});
 let keyTimer=0;
-svg.addEventListener('keydown',e=>{const c=e.target.closest('.pt');if(!c)return;clearTimeout(keyTimer);keyTimer=setTimeout(()=>sendCurve(sel),600);const i=+c.dataset.i,p=GROUPS[sel].curve[i];const k={ArrowUp:[0,2],ArrowDown:[0,-2],ArrowLeft:[-1,0],ArrowRight:[1,0]}[e.key];if(!k)return;e.preventDefault();p[0]+=k[0];p[1]=Math.max(0,Math.min(100,p[1]+k[1]));drawCurve();svg.querySelector(`.pt[data-i="${i}"]`)?.focus()});
-document.querySelectorAll('[data-preset]').forEach(b=>b.onclick=()=>{const g=GROUPS[sel];if(g.readonly||g.fixed)return;const p=b.dataset.preset;g.curve=(p==='bios'?BIOS_CURVES[sel]:PRESETS[p]).map(x=>[...x]);document.querySelectorAll('[data-preset]').forEach(c=>c.setAttribute('aria-pressed',c===b));drawCurve();sendCurve(sel)});
+svg.addEventListener('keydown',e=>{const c=e.target.closest('.pt');if(!c)return;clearTimeout(keyTimer);keyTimer=setTimeout(()=>markDirty(sel),0);const i=+c.dataset.i,p=GROUPS[sel].curve[i];const k={ArrowUp:[0,2],ArrowDown:[0,-2],ArrowLeft:[-1,0],ArrowRight:[1,0]}[e.key];if(!k)return;e.preventDefault();p[0]+=k[0];p[1]=Math.max(0,Math.min(100,p[1]+k[1]));drawCurve();svg.querySelector(`.pt[data-i="${i}"]`)?.focus()});
+document.querySelectorAll('[data-preset]').forEach(b=>b.onclick=()=>{const g=GROUPS[sel];if(g.readonly||g.fixed)return;const p=b.dataset.preset;g.curve=(p==='bios'?BIOS_CURVES[sel]:PRESETS[p]).map(x=>[...x]);document.querySelectorAll('[data-preset]').forEach(c=>c.setAttribute('aria-pressed',c===b));drawCurve();markDirty(sel)});
 
 /* ---------- side panel ---------- */
 let selT=-1;
 function select(k,quiet){sel=k;const g=GROUPS[k];if(!quiet){selT=performance.now()/1000;touched()}
   document.getElementById('g-name').textContent=g.name;
-  document.getElementById('g-meta').textContent=g.readonly?`auto · ${g.temp}°C`:`${g.duty}% · ${g.temp}°C`;
+  document.getElementById('g-meta').textContent=g.readonly?`auto · ${g.temp}°C`:g.actual!=null?`${g.held?'held':'target'} ${g.duty}% · actual ${g.actual}% · ${g.temp}°C`:`${g.duty}% · ${g.temp}°C`;
   document.getElementById('dir-row').hidden=k!=='rear';
   groupEls.forEach(b=>{b.setAttribute('aria-selected',b.dataset.g===k);b.title=rowTitle(b.dataset.g)});
   labelEls.forEach(b=>b.setAttribute('aria-pressed',b.dataset.g===k));
   document.querySelectorAll('[data-preset]').forEach(b=>{b.disabled=!!(g.readonly||g.fixed)});
   document.getElementById('identify').disabled=!!(g.readonly||g.fixed);
-  drawCurve();
+  drawCurve();renderControls();
 }
+let renderControls=()=>{};
 balance();select('rad',true);
 
 /* ---------- live fan control (Homebase backend → prox) ----------
    Same-origin calls with the dashboard session. If there's no session or no fan service
-   (for example on the public demo), everything stays modeled. A curve change applies when you let go. */
-const live={on:false,csrf:null,mode:null,editing:false,timer:0};
+   (for example on the public demo), everything stays modeled. Curve edits apply on Save; Hold pins a speed for a time. */
+const live={on:false,csrf:null,mode:null,timer:0,dirty:new Set(),saved:{},holds:{},holdsAt:0,holdsServer:0,holdTotal:{}};
 const ctlEl=document.getElementById('ctl'),applyEl=document.getElementById('apply-state'),identifyEl=document.getElementById('identify'),noteEl=document.getElementById('live-note');
 const CONTROLLED=['rad','top','floor','rear'];
 const say=(text,tone='')=>{applyEl.hidden=!text;applyEl.textContent=text;applyEl.className='apply '+tone};
@@ -791,14 +793,15 @@ async function api(method,body){
 }
 function applyStatus(st){
   const avg=a=>a&&a.length?Math.round(a.reduce((x,y)=>x+y,0)/a.length):null;
-  for(const[g,v]of Object.entries(st.groups||{})){if(!GROUPS[g])continue;liveRpm[g]=avg(v.rpm)??0;const d=v.target??avg(v.duty);if(d!=null)GROUPS[g].duty=Math.round(d)}
+  for(const[g,v]of Object.entries(st.groups||{})){if(!GROUPS[g])continue;liveRpm[g]=avg(v.rpm)??0;const a=avg(v.duty),d=v.target??a;GROUPS[g].actual=a;if(d!=null)GROUPS[g].duty=Math.round(d)}
+  live.holds=st.holds||{};live.holdsAt=performance.now();live.holdsServer=st.observedAt/1000;for(const g of CONTROLLED)GROUPS[g].held=!!live.holds[g];
   if(st.temps?.tctl!=null){GROUPS.rad.temp=Math.round(st.temps.tctl);GROUPS.pump.temp=GROUPS.rad.temp}
   if(st.temps?.system!=null)['top','floor','rear'].forEach(g=>GROUPS[g].temp=Math.round(st.temps.system));
-  if(!live.editing&&drag===null)for(const g of CONTROLLED)if(st.curves?.[g])GROUPS[g].curve=st.curves[g].map(p=>[...p]);
+  for(const g of CONTROLLED)if(st.curves?.[g]){live.saved[g]=st.curves[g].map(p=>[...p]);if(!live.dirty.has(g)&&!(drag!==null&&g===sel))GROUPS[g].curve=st.curves[g].map(p=>[...p])}
   live.mode=st.mode;
   document.getElementById('mode-curves').setAttribute('aria-pressed',st.requestedMode==='curves');
   document.getElementById('mode-bios').setAttribute('aria-pressed',st.requestedMode!=='curves');
-  groupEls.forEach(b=>{const g=GROUPS[b.dataset.g];b.querySelector('.rpm').textContent=g.readonly?'auto':rpmOf(b.dataset.g).toLocaleString();b.querySelector('.duty b').style.width=g.duty+'%'});
+  groupEls.forEach(b=>{const g=GROUPS[b.dataset.g],tick=b.querySelector('.duty em');b.querySelector('.rpm').textContent=g.readonly?'auto':rpmOf(b.dataset.g).toLocaleString();b.querySelector('.duty b').style.width=(g.actual??g.duty)+'%';tick.hidden=g.readonly||g.fixed||g.actual==null;tick.style.left=g.duty+'%'});   // bar = actual speed, tick = target
   labelEls.forEach(b=>{const k=b.dataset.g;b.querySelector('b').textContent=GROUPS[k].readonly?'auto':rpmOf(k).toLocaleString()+' rpm'});
   const msg=st.error?`BIOS in charge · ${st.error}`:st.mode==='curves'?'Live from prox · your curves are running':'Live from prox · BIOS curves in charge';
   noteEl.textContent=msg;parent!==window&&parent.postMessage({type:'homebase-case-live',live:true,mode:st.mode,error:st.error||null},location.origin);
@@ -809,12 +812,44 @@ async function poll(){
   if(document.visibilityState==='visible'){try{applyStatus(await api('GET'))}catch{}}
   live.timer=setTimeout(poll,3000);
 }
-async function sendCurve(g){
-  if(!live.on||!CONTROLLED.includes(g))return;
-  live.editing=true;say('Applying…');
-  try{const st=await api('POST',{group:g,curve:GROUPS[g].curve});live.editing=false;applyStatus(st);say(`Applied · ${GROUPS[g].name} at ${GROUPS[g].duty}% now`,'ok')}
-  catch(e){live.editing=false;say(`Not applied · ${e.message}`,'bad');poll()}
+function markDirty(g){if(!live.on||!CONTROLLED.includes(g))return;live.dirty.add(g);say('');renderControls()}
+async function saveCurve(){
+  const g=sel;if(!live.dirty.has(g))return;say('Saving…');
+  try{const st=await api('POST',{group:g,curve:GROUPS[g].curve});live.dirty.delete(g);applyStatus(st);say(`Saved · ${GROUPS[g].name} targets ${GROUPS[g].duty}% now`,'ok')}
+  catch(e){say(`Not saved · ${e.message}`,'bad')}
 }
+function revertCurve(){const g=sel;if(live.saved[g])GROUPS[g].curve=live.saved[g].map(p=>[...p]);live.dirty.delete(g);document.querySelectorAll('[data-preset]').forEach(b=>b.setAttribute('aria-pressed','false'));say('');drawCurve();renderControls()}
+document.getElementById('save').onclick=saveCurve;document.getElementById('revert').onclick=revertCurve;
+/* hold: pin the selected group at a speed for a time; above 60% only 10 s (the noise rule, also enforced on prox) */
+const holdDuty=document.getElementById('hold-duty'),holdVal=document.getElementById('hold-val'),holdBtn=document.getElementById('hold-btn'),holdHint=document.getElementById('hold-hint'),holdBar=document.getElementById('hold-bar');
+let holdSecs=60;
+const timeChips=[...document.querySelectorAll('#hold-times .chip')];
+timeChips.forEach(c=>c.onclick=()=>{holdSecs=c.dataset.s==='hold'?null:+c.dataset.s;renderControls()});
+holdDuty.oninput=()=>renderControls();
+const remaining=g=>{const h=live.holds[g];if(!h)return null;if(h.until==null)return Infinity;return Math.max(0,h.until-live.holdsServer-(performance.now()-live.holdsAt)/1000)};
+const clock=s=>s>=60?`${Math.floor(s/60)}:${String(Math.floor(s%60)).padStart(2,'0')}`:`${Math.ceil(s)} s`;
+renderControls=()=>{
+  const g=GROUPS[sel],ctl=live.on&&CONTROLLED.includes(sel);
+  document.getElementById('savebar').hidden=!(ctl&&live.dirty.has(sel));
+  document.getElementById('hold-box').hidden=!ctl;if(!ctl)return;
+  const d=+holdDuty.value,loud=d>60;holdVal.textContent=d+'%';
+  if(loud&&(holdSecs==null||holdSecs>10))holdSecs=10;
+  timeChips.forEach(c=>{const s=c.dataset.s==='hold'?null:+c.dataset.s;c.disabled=loud&&(s==null||s>10);c.setAttribute('aria-pressed',s===holdSecs)});
+  holdHint.textContent=loud?'Above 60%: 10 s max (your noise rule)':'';
+  const left=remaining(sel);
+  if(left!=null&&left>0){const h=live.holds[sel];holdBtn.classList.add('running');holdBtn.textContent=left===Infinity?`Holding ${h.duty}% · Release`:`Holding ${h.duty}% · ${clock(left)} · Release`;
+    const tot=live.holdTotal[sel];holdBar.hidden=left===Infinity||!tot;if(tot)holdBar.style.width=Math.max(0,Math.min(100,left/tot*100))+'%'}
+  else{holdBtn.classList.remove('running');holdBtn.textContent=`Hold ${d}%`;holdBar.hidden=true}
+};
+holdBtn.onclick=async()=>{
+  const g=sel,left=remaining(g);
+  try{
+    if(left!=null&&left>0){say('Releasing…');applyStatus(await api('POST',{release:g}));say(`${GROUPS[g].name} back on its curve`,'ok');return}
+    const duty=+holdDuty.value;say(`Holding ${GROUPS[g].name} at ${duty}%…`);
+    const st=await api('POST',{hold:g,duty,seconds:holdSecs});live.holdTotal[g]=holdSecs;applyStatus(st);say(`${GROUPS[g].name} held at ${duty}%${holdSecs?` for ${clock(holdSecs)}`:' until you release it'}`,'ok');
+  }catch(e){say(`Not changed · ${e.message}`,'bad')}
+};
+setInterval(()=>{if(live.on&&Object.keys(live.holds).length)renderControls()},250);
 async function setMode(mode){
   if(!live.on)return;say(mode==='curves'?'Turning your curves on…':'Handing back to the BIOS…');
   try{applyStatus(await api('POST',{mode}));say(mode==='curves'?'Your curves are running':'BIOS curves are in charge','ok')}catch(e){say(`Not changed · ${e.message}`,'bad')}
