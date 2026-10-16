@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react';
-import { ArrowUpRight, Boxes, ChevronRight, Fan, Gpu, History, Microchip, X } from 'lucide-react';
+import { ArrowUpRight, Boxes, ChevronRight, Gpu, History, Microchip, X } from 'lucide-react';
 import { age, fmt, isNumber } from './api.js';
 import { Badge, Dialog, Dot, Empty, Meter, Panel } from './components.jsx';
 import { useComputeLive, useNow } from './hooks.js';
@@ -82,7 +82,7 @@ function tempColor(t) {
   return `rgb(${stops.at(-1)[1]})`;
 }
 // Sequential single-hue ramp for load (light -> deep accent).
-const heat = load => isNumber(load) ? `color-mix(in oklab, #2c49b8 ${Math.round(clamp(load, 0, 100))}%, #e6eaf7)` : '#3a3d45';
+const heat = load => isNumber(load) ? `color-mix(in oklab, #6a85ff ${Math.round(clamp(load, 0, 100))}%, #1c2232)` : '#3a3d45';
 const gib = mib => isNumber(mib) ? mib / 1024 : null;
 const shortGpu = name => (name || 'GPU').replace(/^NVIDIA\s+/i, '').replace(/^GeForce\s+/i, 'GeForce ');
 const shortCpu = model => (model || 'CPU').replace(/^AMD\s+/i, '').replace(/\s+\d+-Core Processor$/i, '');
@@ -260,24 +260,6 @@ function GpuFan({ cx, cy, r, rps, enabled }) {
     </g>
   </g>;
 }
-function DialBlades({ pump, className }) {
-  return <g className={className}>{pump
-    ? Array.from({ length: 6 }, (_, i) => <path key={i} transform={`rotate(${i * 60})`} d="M0,-4 Q7,-9 4,-15 L1,-15 Q2,-9 -2,-4 Z" className="fan-dial-blade" />)
-    : Array.from({ length: 7 }, (_, i) => <path key={i} transform={`rotate(${i * 360 / 7})`} d="M0,-4 C5,-7 9,-12 6,-16 C3,-16 0,-11 -2,-4 Z" className="fan-dial-blade" />)}</g>;
-}
-function FanDial({ fan, animate, openMetric }) {
-  const rotor = useRef(null), pump = fan.role === 'pump' || /pump/i.test(fan.name);
-  useSpin(rotor, fan.rpm / 1000, animate);
-  const share = fan.maxRpm ? fan.rpm / fan.maxRpm * 100 : null;
-  return <button type="button" className="fan-dial" onClick={() => openMetric(`board.fan.${fan.id}`)} aria-label={`${fan.name}: ${fmt(fan.rpm, 0)} RPM. View history`} title={`${fan.name} · ${fmt(fan.rpm, 0)} RPM${fan.maxRpm ? ` of ${fmt(fan.maxRpm, 0)} RPM reference` : ''}${fan.role === 'unassigned' ? ' · role not configured' : ''} · view history`}>
-    <svg viewBox="-20 -20 40 40" aria-hidden="true"><defs><radialGradient id={`dial-blur-${fan.id}`}><stop offset=".2" stopColor="#5d6372" stopOpacity="0" /><stop offset=".3" stopColor="#5d6372" stopOpacity=".75" /><stop offset=".9" stopColor="#6c7281" stopOpacity=".55" /><stop offset="1" stopColor="#6c7281" stopOpacity="0" /></radialGradient></defs>
-      <circle r="18.5" className="fan-dial-ring" /><g ref={rotor} className="rotor"><circle r="17" fill="transparent" />
-        <g transform="rotate(-12)"><DialBlades pump={pump} className="fan-ghost" /></g><g transform="rotate(-24)"><DialBlades pump={pump} className="fan-ghost" /></g>
-        <DialBlades pump={pump} className="fan-crisp" /><circle r="16.5" fill={`url(#dial-blur-${fan.id})`} className="fan-disc" /><circle r="4" className="fan-dial-hub" /></g></svg>
-    <div><span>{fan.name}</span><strong>{fmt(fan.rpm, 0)}<small> RPM</small></strong>{isNumber(share) && <small className="fan-share">{fmt(share, 0)}% of ref.</small>}</div>
-  </button>;
-}
-
 /* ---------- GPU ---------- */
 const GPU_BOX = [520, 236];
 function GpuArt({ gpu, artRef, animate, overlay }) {
@@ -431,12 +413,6 @@ function Processes({ processes, onOpen }) {
     {processes.length ? processes.map(p => <button type="button" className="process-chip" key={p.pid} onClick={() => onOpen?.(p.container ? `gpu.vram.ct.${p.container}` : null)}><strong>{p.name}</strong><small>{p.container ? `CT ${p.container}${p.containerName ? ` · ${p.containerName}` : ''}` : 'host'} · {isNumber(p.memory) ? `${fmt(p.memory / 1024)} GiB` : 'memory n/a'}</small></button>)
       : <span className="process-none">No compute processes right now</span>}</div>;
 }
-function BoardFans({ fans, animate, openMetric }) {
-  const spinning = fans.filter(f => f.rpm > 0), idle = fans.length - spinning.length;
-  if (!fans.length) return null;
-  return <div className="board-fans"><span className="eyebrow"><Fan size={12} /> Board fans · nct6687</span><div className="fan-dials">{spinning.map(f => <FanDial key={f.id} fan={f} animate={animate} openMetric={openMetric} />)}</div>{idle > 0 && <small className="muted-inline">{idle} header{idle === 1 ? '' : 's'} at 0 RPM · unused or stopped</small>}</div>;
-}
-
 function liveState(c, now) {
   if (!c) return { tone: 'gray', label: 'Not connected' };
   const seconds = (now - c.observedAt) / 1000;
@@ -462,11 +438,24 @@ export function ComputeShowcase({ snapshot, open, thermalLimit }) {
       <section className="showcase-section" aria-label="Processor">
         <div className="showcase-heading"><div><span className="eyebrow">Processor · per-thread load</span><h3>{shortCpu(c.cpu?.model)}</h3></div><span className="heat-legend" aria-label="Thread load scale from 0 to 100 percent"><small>0%</small><i /><small>100%</small></span></div>
         <CpuStage c={c} series={series} thermalLimit={thermalLimit} openMetric={openMetric} openGroup={openGroup} />
-        <BoardFans fans={c.board?.fans || []} animate={animate} openMetric={openMetric} />
       </section>
       <div className="panel-footnote"><span>{status.label === 'Live' ? 'Collecting every 3 s while this panel is visible' : 'Collected every 30 s in the background'}</span><span>Tap a part or a reading for its history</span></div>
     </>}
   </Panel></div>;
+}
+
+/** One part's live stage in a dialog, opened by clicking the GPU or the CPU in the 3D case view. */
+export function PartShowcase({ snapshot, part, close, open, thermalLimit }) {
+  const [live] = useComputeLive(true), now = useNow(1000);
+  const c = live.compute || snapshot.compute, series = live.series || [], status = liveState(c, now), gpu = part === 'gpu';
+  const from = `part:${part}`, openGroup = (group, metric) => group && open({ type: 'group', group, metric, from }), openMetric = id => openGroup(groupOf(id, c), id);
+  return <Dialog title={gpu ? shortGpu(c?.gpu?.name) : shortCpu(c?.cpu?.model)} eyebrow={gpu ? 'HOMEBASE / GRAPHICS' : 'HOMEBASE / PROCESSOR'} className="part-dialog" close={close} actions={<RefreshButton sources={['compute']} label="Refresh GPU and CPU readings" showStatus />}>
+    {!c ? <Empty icon={Gpu} title="GPU & CPU telemetry is not connected" /> : <>
+      <div className="detail-subtitle"><Badge tone={status.tone === 'green' ? 'success' : status.tone === 'amber' ? 'warning' : 'neutral'}><Dot tone={status.tone} />{status.label}</Badge><span>Observed {age(c.observedAt)} · tap a part or a reading for its history</span><button className="text-button" onClick={() => open({ type: 'compute' })}>All readings <ArrowUpRight size={14} /></button></div>
+      {gpu ? <><GpuStage c={c} series={series} animate={!c.stale} openMetric={openMetric} openGroup={openGroup} />{c.gpu && <Processes processes={c.processes || []} onOpen={metric => openGroup('gpu.processes', metric)} />}</>
+        : <CpuStage c={c} series={series} thermalLimit={thermalLimit} openMetric={openMetric} openGroup={openGroup} />}
+    </>}
+  </Dialog>;
 }
 
 /** Details modal: every reading as text, larger trends, and the process list. */

@@ -643,13 +643,22 @@ function placeLabels(){if(!showLabels)return;const r=canvas.getBoundingClientRec
   labelEls.forEach(b=>{const a=ANCHOR[b.dataset.g];lv.set(a[0],a[1],a[2]).project(cam);const vis=lv.z<1&&Math.abs(lv.x)<1.05&&Math.abs(lv.y)<1.05;b.style.opacity=vis?1:0;b.style.pointerEvents=vis?'auto':'none';
     b.style.transform=`translate(${(lv.x*.5+.5)*r.width}px,${(-lv.y*.5+.5)*r.height}px) translate(-50%,-50%)`})}
 
-/* picking */
+/* picking: fans select their group; the GPU and the CPU open their live view in Homebase */
+const PARTS={gpu:['GeForce RTX 3070','live GPU view'],cpu:['Ryzen 9 7900X','live CPU view']};
+const partHits=[['gpu',OBST.find(o=>o.id==='gpu').b],['cpu',OBST.find(o=>o.id==='pump').b]].map(([part,b])=>{
+  const m=new THREE.Mesh(new THREE.BoxGeometry(b[1]-b[0],b[3]-b[2],b[5]-b[4]),new THREE.MeshBasicMaterial({visible:false}));
+  m.position.set((b[0]+b[1])/2,(b[2]+b[3])/2,(b[4]+b[5])/2);m.userData.part=part;scene.add(m);return m});
+function openPart(part){if(EMBED)parent.postMessage({type:'homebase-case-open',part},location.origin);else location.href='/#part/'+part}
 const ray=new THREE.Raycaster(),mouse=new THREE.Vector2();const tip=document.getElementById('tip');let hover=null,down=null;
-function pick(e){const r=canvas.getBoundingClientRect();mouse.set(((e.clientX-r.left)/r.width)*2-1,-((e.clientY-r.top)/r.height)*2+1);ray.setFromCamera(mouse,cam);const hit=ray.intersectObjects(hitboxes,false)[0];return hit?hit.object.userData.fan:null}
-canvas.addEventListener('pointermove',e=>{const f=pick(e);hover=f;canvas.style.cursor=f?'pointer':'grab';if(f){const g=GROUPS[f.group];const r=canvas.getBoundingClientRect();tip.hidden=false;tip.style.left=(e.clientX-r.left)+'px';tip.style.top=(e.clientY-r.top)+'px';tip.innerHTML=`<b>${g.name}</b><span>${g.readonly?'set by the driver':rpmOf(f.group).toLocaleString()+' rpm · '+g.count}</span>`}else tip.hidden=true});
+function pick(e){const r=canvas.getBoundingClientRect();mouse.set(((e.clientX-r.left)/r.width)*2-1,-((e.clientY-r.top)/r.height)*2+1);ray.setFromCamera(mouse,cam);const hit=ray.intersectObjects([...hitboxes,...partHits],false)[0];return hit?hit.object.userData:null}
+canvas.addEventListener('pointermove',e=>{const u=pick(e),f=u?.fan||null,part=u?.part||(f?.group==='gpu'?'gpu':null);hover=f;canvas.style.cursor=u?'pointer':'grab';
+  if(!u){tip.hidden=true;return}
+  const r=canvas.getBoundingClientRect();tip.hidden=false;tip.style.left=(e.clientX-r.left)+'px';tip.style.top=(e.clientY-r.top)+'px';
+  if(part){tip.innerHTML=`<b>${PARTS[part][0]}</b><span>click for the ${PARTS[part][1]}</span>`;return}
+  const g=GROUPS[f.group];tip.innerHTML=`<b>${g.name}</b><span>${rpmOf(f.group).toLocaleString()} rpm · ${g.count}</span>`});
 canvas.addEventListener('pointerleave',()=>{tip.hidden=true;hover=null});
 canvas.addEventListener('pointerdown',e=>{down=[e.clientX,e.clientY]});
-canvas.addEventListener('pointerup',e=>{if(down&&Math.hypot(e.clientX-down[0],e.clientY-down[1])<5){const f=pick(e);if(f)select(f.group)}down=null});
+canvas.addEventListener('pointerup',e=>{if(down&&Math.hypot(e.clientX-down[0],e.clientY-down[1])<5){const u=pick(e);if(u?.fan)select(u.fan.group);const part=u?.part||(u?.fan?.group==='gpu'?'gpu':null);if(part)openPart(part)}down=null});
 
 /* ---------- frame loop ---------- */
 let last=performance.now();

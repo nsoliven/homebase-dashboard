@@ -54,6 +54,6 @@ try {
     "  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self'; form-action 'self'",
     '/api/*', '  Content-Type: image/svg+xml', '/demo-api/*', '  Cache-Control: no-cache', ''].join('\n'));
   const index = resolve(out, 'index.html');
-  writeFileSync(index, readFileSync(index, 'utf8').replace('</body>', '<a href="https://github.com/nsoliven/homebase-dashboard" style="position:fixed;bottom:8px;right:14px;padding:5px 9px;border:1px solid #dedee5;border-radius:6px;background:white;color:#555;font:11px system-ui;z-index:9999;text-decoration:none">Live demo · sample data</a></body>'));
+  writeFileSync(index, readFileSync(index, 'utf8').replace('</body>', '<a href="https://github.com/nsoliven/homebase-dashboard" style="position:fixed;bottom:8px;right:14px;padding:5px 9px;border:1px solid #2a303d;border-radius:6px;background:#11141b;color:#a3a9b8;font:11px system-ui;z-index:9999;text-decoration:none">Live demo · sample data</a></body>'));
   console.log(`Exported ${saved.size} sample responses and ${icons.size} icons to dist-demo/.`);
 } finally { server.kill(); }
