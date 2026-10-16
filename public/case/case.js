@@ -8,16 +8,16 @@ const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
 const isDark=()=>{const t=document.documentElement.dataset.theme;return t?t==='dark':matchMedia('(prefers-color-scheme: dark)').matches};
 const small=matchMedia('(max-width: 640px)').matches;
 
-/* Real readings from prox at 19:00 on 2026-10-15; the header → group mapping still needs confirming. */
-const HEADERS=[
- {id:'CPU_FAN',rpm:1118,group:'rad',guess:true},
- {id:'PUMP_FAN',rpm:3200,group:'pump',guess:false},
- {id:'SYS_FAN1',rpm:0,group:null},
- {id:'SYS_FAN2',rpm:813,group:'floor',guess:true},
- {id:'SYS_FAN3',rpm:1101,group:'top',guess:true},
- {id:'SYS_FAN4',rpm:1143,group:'rear',guess:true},
- {id:'SYS_FAN5',rpm:1032,group:'rear',guess:true},
- {id:'SYS_FAN6',rpm:0,group:null},
+/* Readings from prox at 19:00 on 2026-10-15. */
+const HEADERS=[   // BIOS names; the map was confirmed with Identify on 2026-10-15 (top: System Fan 1 + 6, which report no RPM)
+ {id:'CPU Fan 1',rpm:1118,group:'rad'},
+ {id:'Pump Sys Fan 1',rpm:3200,group:'pump'},
+ {id:'System Fan 1',rpm:0,group:'top'},
+ {id:'System Fan 2',rpm:813,group:'rear'},
+ {id:'System Fan 3',rpm:1101,group:'rear'},
+ {id:'System Fan 4',rpm:1143,group:'floor'},
+ {id:'System Fan 5',rpm:1032,group:'floor'},
+ {id:'System Fan 6',rpm:0,group:'top'},
 ];
 const GROUPS={
  rad:{name:'Radiator',count:'3 × 120 mm',dir:'Exhaust · right grille',color:'#4a5fd6',src:'tctl',temp:61,duty:38,curve:[[50,20],[80,45],[95,60],[100,100]]},
@@ -30,7 +30,7 @@ const GROUPS={
 const rearDir=()=>GROUPS.rear.flow==='in'?'Intake · from the back':'Exhaust · out the back';
 GROUPS.rear.dir=rearDir();
 const liveRpm={};   // filled from prox when fan control is connected
-const rpmOf=g=>{if(liveRpm[g]!=null)return liveRpm[g];const h=HEADERS.filter(h=>h.group===g);return h.length?Math.round(h.reduce((a,b)=>a+b.rpm,0)/h.length):0};
+const rpmOf=g=>{if(liveRpm[g]!=null)return liveRpm[g];if(g==='top')return Math.round((GROUPS.top?.duty??40)*18);const h=HEADERS.filter(h=>h.group===g);return h.length?Math.round(h.reduce((a,b)=>a+b.rpm,0)/h.length):0};
 // rough fan airflow: ~60 CFM for a 120 mm fan at 1,500 rpm, scaling with rpm and diameter³; radiators restrict ~35%
 const cfm=(rpm,size)=>60*(rpm/1500)*Math.pow(size/1.2,3);
 let sel='rad';
@@ -792,7 +792,7 @@ async function api(method,body){
 }
 function applyStatus(st){
   const avg=a=>a&&a.length?Math.round(a.reduce((x,y)=>x+y,0)/a.length):null;
-  for(const[g,v]of Object.entries(st.groups||{})){if(!GROUPS[g])continue;liveRpm[g]=avg(v.rpm)??0;const a=avg(v.duty),d=v.target??a;GROUPS[g].actual=a;if(d!=null)GROUPS[g].duty=Math.round(d)}
+  for(const[g,v]of Object.entries(st.groups||{})){if(!GROUPS[g])continue;const a=avg(v.duty),d=v.target??a,blind=v.rpm.length>0&&v.rpm.every(r=>r===0);GROUPS[g].noTach=blind;liveRpm[g]=blind?Math.round((a??0)*18):avg(v.rpm)??0;GROUPS[g].actual=a;if(d!=null)GROUPS[g].duty=Math.round(d)}   // no tach signal: spin and airflow are estimated from duty
   live.holds=st.holds||{};live.holdsAt=performance.now();live.holdsServer=st.observedAt/1000;for(const g of CONTROLLED)GROUPS[g].held=!!live.holds[g];
   if(st.temps?.tctl!=null){GROUPS.rad.temp=Math.round(st.temps.tctl);GROUPS.pump.temp=GROUPS.rad.temp}
   if(st.temps?.system!=null)['top','floor','rear'].forEach(g=>GROUPS[g].temp=Math.round(st.temps.system));
@@ -800,7 +800,7 @@ function applyStatus(st){
   live.mode=st.mode;
   document.getElementById('mode-curves').setAttribute('aria-pressed',st.requestedMode==='curves');
   document.getElementById('mode-bios').setAttribute('aria-pressed',st.requestedMode!=='curves');
-  groupEls.forEach(b=>{const g=GROUPS[b.dataset.g],tick=b.querySelector('.duty em');b.querySelector('.rpm').textContent=g.readonly?'auto':rpmOf(b.dataset.g).toLocaleString();b.querySelector('.duty b').style.width=(g.actual??g.duty)+'%';tick.hidden=g.readonly||g.fixed||g.actual==null;tick.style.left=g.duty+'%'});   // bar = actual speed, tick = target
+  groupEls.forEach(b=>{const g=GROUPS[b.dataset.g],tick=b.querySelector('.duty em');b.querySelector('.rpm').textContent=g.readonly?'auto':g.noTach?'no RPM':rpmOf(b.dataset.g).toLocaleString();b.querySelector('.duty b').style.width=(g.actual??g.duty)+'%';tick.hidden=g.readonly||g.fixed||g.actual==null;tick.style.left=g.duty+'%'});   // bar = actual speed, tick = target
   labelEls.forEach(b=>{const k=b.dataset.g;b.querySelector('b').textContent=GROUPS[k].readonly?'auto':rpmOf(k).toLocaleString()+' rpm'});
   const msg=st.error?`BIOS in charge · ${st.error}`:st.mode==='curves'?'Live from prox · your curves are running':'Live from prox · BIOS curves in charge';
   noteEl.textContent=msg;parent!==window&&parent.postMessage({type:'homebase-case-live',live:true,mode:st.mode,error:st.error||null},location.origin);
