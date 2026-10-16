@@ -85,6 +85,8 @@ html.embed #view{height:clamp(460px,calc(var(--host-vh,900px) * .74),900px);back
 .hold .chips{margin:0}
 .hold-btn{position:relative;width:100%}
 .hold-btn.running{background:var(--glass);color:var(--fg)}
+.hold-opt{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);cursor:pointer}
+.hold-opt input{accent-color:var(--accent)}
 .hold-bar{display:block;height:3px;border-radius:2px;background:var(--accent);margin-top:-6px;transition:width .25s linear}
 .apply{font-size:12px;color:var(--muted);margin-top:6px}
 .apply.ok{color:var(--ok)}
@@ -169,7 +171,7 @@ html.embed #view{height:clamp(460px,calc(var(--host-vh,900px) * .74),900px);back
           <input type="range" id="hold-duty" min="0" max="100" step="5" value="50" aria-label="Hold speed">
           <div class="chips" id="hold-times" role="group" aria-label="Hold for"><button class="chip" data-s="10">10 s</button><button class="chip" data-s="30">30 s</button><button class="chip" data-s="60" aria-pressed="true">1 min</button><button class="chip" data-s="300">5 min</button><button class="chip" data-s="900">15 min</button><button class="chip" data-s="hold">Until released</button></div>
           <button class="btn hold-btn" id="hold-btn">Hold 50%</button><i class="hold-bar" id="hold-bar" hidden></i>
-          <div class="muted" id="hold-hint"></div>
+          <label class="hold-opt"><input type="checkbox" id="hold-others" checked> Other fans off while holding</label>
         </div>
       </div>
       <div title="Estimated from fan RPM and size; radiators restrict about 35%. More intake than exhaust keeps dust out.">
