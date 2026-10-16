@@ -688,7 +688,7 @@ const FOCUS={
   cpu:{tgt:[PUMP.x,PUMP.y,BZ+0.5],pos:[0.7,4.9,3.7]},
   gpu:{tgt:[GPU.x-0.3,GPU.y,BZ+0.55],pos:[-4.4,4.5,0.9]},
 };
-let tween=null,inspecting=false;   // while inspecting an item the idle tour stays off, until a view preset
+let tween=null,inspecting=false;   // after inspecting an item the tour waits 15 s of no input (instead of 5) before it resumes
 function focusOn(k){
   const f=FOCUS[k];if(!f)return;touched();stopCine();inspecting=true;
   const r=canvas.getBoundingClientRect(),far=Math.max(1,Math.min(1.7,1.15/Math.max(0.4,r.width/Math.max(1,r.height))));
@@ -707,7 +707,8 @@ function runTween(nowMs){
   return true;
 }
 function directShot(nowMs){
-  const idle=!reduce&&!inspecting&&nowMs-lastInput>5000&&!document.hidden;
+  const idle=!reduce&&nowMs-lastInput>(inspecting?15000:5000)&&!document.hidden;
+  if(idle)inspecting=false;
   if(!idle){stopCine();return false}
   const now=nowMs/1000;if(!cine.on)startCine(now);
   const sh=SHOTS[cine.i],el=now-cine.t0;
