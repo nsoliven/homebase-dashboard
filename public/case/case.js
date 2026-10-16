@@ -625,7 +625,7 @@ document.getElementById('tog-tint').onclick=e=>{tintOn=!tintOn;e.currentTarget.s
 /* ---------- camera, layers, panels ---------- */
 const VIEWS={iso:[-7.52,5.4,9.28],front:[0,3.0,12.2],right:[11.4,3.2,1.9],back:[0.35,3.2,-12.2],gpu:[-7.2,4.6,2.6],top:[0.01,15,0.6]};
 // a tall, narrow stage (phones) needs the camera further out to fit the whole case
-function setView(k){touched();controls.minDistance=3.5;if(cam.fov!==34){cam.fov=34;cam.updateProjectionMatrix()}controls.target.set(0,3.0,0);const r=canvas.getBoundingClientRect(),far=k==='top'?1:Math.max(1,Math.min(1.7,1.15/Math.max(0.4,r.width/Math.max(1,r.height))));const v=VIEWS[k];cam.position.set(v[0]*far,3+(v[1]-3)*far,v[2]*far);controls.update();Object.keys(VIEWS).forEach(v=>document.getElementById('cam-'+v).setAttribute('aria-pressed',v===k))}
+function setView(k,quiet){if(!quiet)touched();controls.minDistance=3.5;if(cam.fov!==34){cam.fov=34;cam.updateProjectionMatrix()}controls.target.set(0,3.0,0);const r=canvas.getBoundingClientRect(),far=k==='top'?1:Math.max(1,Math.min(1.7,1.15/Math.max(0.4,r.width/Math.max(1,r.height))));const v=VIEWS[k];cam.position.set(v[0]*far,3+(v[1]-3)*far,v[2]*far);controls.update();Object.keys(VIEWS).forEach(v=>document.getElementById('cam-'+v).setAttribute('aria-pressed',v===k))}
 Object.keys(VIEWS).forEach(k=>document.getElementById('cam-'+k).onclick=()=>setView(k));
 /* ---------- cinematic idle: a product-demo tour ----------
    After 5 s without input the camera runs a loop of eased shots (orbits, dollies, cranes and close-ups),
@@ -644,7 +644,8 @@ const capEl=document.getElementById('cine-cap'),BLEND=2.4;
 const ease=t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2,glide=t=>(1-Math.cos(Math.PI*t))/2;
 const cine={on:false,i:0,t0:0,from:null};
 const lerp3=(a,b,t)=>[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t];
-function startCine(now){cine.on=true;cine.t0=now;cine.from={pos:cam.position.toArray(),tgt:controls.target.toArray(),fov:cam.fov}}
+function startCine(now){cine.on=true;cine.t0=now;cine.from={pos:cam.position.toArray(),tgt:controls.target.toArray(),fov:cam.fov};
+  if(!cine.started){cine.started=true;cine.t0=now-BLEND-SHOTS[cine.i].dur*0.3}}   // first run: already mid-shot, no fade-in from a still pose
 function stopCine(){if(!cine.on)return;cine.on=false;capEl.classList.remove('show');
   // keep the camera where the tour left it; allow the close distance it was at
   controls.minDistance=Math.min(3.5,cam.position.distanceTo(controls.target));controls.update()}
@@ -665,7 +666,7 @@ function directShot(nowMs){
   if(el>=BLEND+sh.dur){cine.i=(cine.i+1)%SHOTS.length;cine.t0=now;cine.from={pos,tgt,fov}}
   return true;
 }
-setView('iso');
+setView('iso',true);   // quiet: the tour starts right away on load
 let showHeat=true,showLabels=false;   // labels off by default: the clean view
 const tog=(id,fn)=>{const b=document.getElementById(id);b.onclick=()=>{const on=b.getAttribute('aria-pressed')!=='true';b.setAttribute('aria-pressed',on);fn(on)}};
 tog('tog-heat',on=>{showHeat=on;glows.forEach(g=>g.visible=on)});
