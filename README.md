@@ -1,5 +1,9 @@
 # Homebase
 
+<p align="center"><img src="docs/screenshots/case-rgb.gif" alt="3D model of prox's Thermaltake The Tower 500 cycling RGB colors while smoke and streaks show the airflow" width="480"></p>
+
+<p align="center"><b>prox, live on the overview.</b> A 3D model of the Thermaltake The Tower 500 with the real parts inside, its fans, airflow you can see and the fan curves.<br><a href="docs/screenshots/case-demo.mp4">Watch the 76-second demo</a></p>
+
 A private infrastructure dashboard with sampled metric history, thermal detail,
 T3 session navigation, account usage, and an application launcher.
 
@@ -21,6 +25,30 @@ production configuration. It is not the production backend.
 For production, set `HOMEBASE_CONFIG` to your protected external configuration
 file and run `npm start`. Preserve the authenticated HTTPS deployment; the demo
 server must never replace it.
+
+## 3D case view
+
+The overview opens on a model of prox's case: the Thermaltake The Tower 500 (Snow, 388 × 398 × 608 mm) with:
+- a Gigabyte RTX 3070 Gaming OC
+- a Lian Li Galahad II Trinity 360
+- an MSI MAG X870E Tomahawk
+- Corsair Vengeance RGB DDR5
+- a Thermaltake GF3 850W
+
+The **Cooling** page shows only the case. Open it full screen at `/case/`.
+
+- **Airflow:** smoke, motion-blurred streaks, or both. The air flows in at the intakes, around the board and parts, and out of the exhausts. **Temp color** shades the air from cool to warm as it passes the GPU and the radiator.
+- **RGB:** off is a studio view with soft shadows. On dims the room and lights the fans, the pump, the RAM and the GPU logo in one color you pick. There is no rainbow mode.
+- **Fan control design:** pick a fan group to see its header, the sensor it follows, its curve, and the airflow balance. The rear fans can be switched between intake and exhaust.
+- **Views:** 3/4, Front, Radiator, Back, GPU and Top; Case, X-ray or Bare; heat glow and labels.
+
+Fan readings are **modeled** from 2026-10-15 values until fan telemetry is connected, and the panel says so. Nothing here changes the real fans. three.js r128 is bundled under `public/case/vendor`, so the page runs under `script-src 'self'`. Only `/case/` may be framed, and only by Homebase itself.
+
+| Studio lighting | RGB on |
+|---|---|
+| ![Case view with RGB off: studio lighting and soft shadows](docs/screenshots/case-studio.png) | ![Case view with RGB on in blue](docs/screenshots/case-rgb-blue.png) |
+| **X-ray with airflow** | **Cooling page** |
+| ![X-ray mode with smoke and streaks colored by temperature](docs/screenshots/case-xray-airflow.png) | ![The Cooling page with the case view](docs/screenshots/case-cooling-page.png) |
 
 ## Screenshots
 
