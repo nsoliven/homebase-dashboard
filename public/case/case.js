@@ -625,8 +625,46 @@ document.getElementById('tog-tint').onclick=e=>{tintOn=!tintOn;e.currentTarget.s
 /* ---------- camera, layers, panels ---------- */
 const VIEWS={iso:[-7.52,5.4,9.28],front:[0,3.0,12.2],right:[11.4,3.2,1.9],back:[0.35,3.2,-12.2],gpu:[-7.2,4.6,2.6],top:[0.01,15,0.6]};
 // a tall, narrow stage (phones) needs the camera further out to fit the whole case
-function setView(k){touched();const r=canvas.getBoundingClientRect(),far=k==='top'?1:Math.max(1,Math.min(1.7,1.15/Math.max(0.4,r.width/Math.max(1,r.height))));const v=VIEWS[k];cam.position.set(v[0]*far,3+(v[1]-3)*far,v[2]*far);controls.update();Object.keys(VIEWS).forEach(v=>document.getElementById('cam-'+v).setAttribute('aria-pressed',v===k))}
+function setView(k){touched();controls.minDistance=3.5;if(cam.fov!==34){cam.fov=34;cam.updateProjectionMatrix()}controls.target.set(0,3.0,0);const r=canvas.getBoundingClientRect(),far=k==='top'?1:Math.max(1,Math.min(1.7,1.15/Math.max(0.4,r.width/Math.max(1,r.height))));const v=VIEWS[k];cam.position.set(v[0]*far,3+(v[1]-3)*far,v[2]*far);controls.update();Object.keys(VIEWS).forEach(v=>document.getElementById('cam-'+v).setAttribute('aria-pressed',v===k))}
 Object.keys(VIEWS).forEach(k=>document.getElementById('cam-'+k).onclick=()=>setView(k));
+/* ---------- cinematic idle: a product-demo tour ----------
+   After 5 s without input the camera runs a loop of eased shots (orbits, dollies, cranes and close-ups),
+   each with a caption, like a build showcase. Any input stops it and hands the camera over where it is. */
+const SHOTS=[
+  {tgt:[0,3.1,0],from:[-9.6,5.2,10.8],to:[-4.2,6.6,12.6],dur:8,fov:34,cap:['prox','Thermaltake The Tower 500 · Snow']},
+  {tgt:[GPU.x-0.3,GPU.y+0.2,BZ+0.55],from:[-4.9,5.0,1.6],to:[-4.3,3.2,-0.2],dur:7,fov:30,cap:['GeForce RTX 3070 Gaming OC','Gigabyte · WINDFORCE 3X · 286 mm']},
+  {tgt:[PUMP.x,PUMP.y,BZ+0.5],from:[1.9,5.3,4.2],to:[-0.1,4.5,3.7],dur:7,fov:28,cap:['Galahad II Trinity 360','Lian Li · pump at 3,200 rpm']},
+  {tgt:[0.45,PUMP.y-0.8,BZ+0.3],from:[-0.9,3.0,4.0],to:[1.4,3.9,3.8],dur:6,fov:28,cap:['Ryzen 9 7900X · 96 GB DDR5','MSI MAG X870E Tomahawk WiFi · Corsair Vengeance RGB']},
+  {tgt:[RAD.x-0.2,RAD.y,RAD.z],from:[-1.0,1.9,4.9],to:[-0.6,4.7,4.6],dur:7,fov:32,cap:['360 mm radiator','3 × 120 mm exhaust · right grille']},
+  {tgt:[0,1.0,0.3],from:[-2.4,2.9,4.6],to:[2.2,2.6,4.5],dur:7,fov:32,cap:['Bottom intake','2 × 140 mm · fresh air from below']},
+  {tgt:[0,5.4,-1.0],from:[-4.2,9.2,-4.6],to:[3.6,8.6,-5.2],dur:7,fov:34,cap:['Top and back','Warm air out, above and behind the board']},
+  {tgt:[0,3.1,0],from:[7.2,4.0,9.0],to:[10.6,6.2,9.6],dur:7,fov:34,cap:['Live airflow','Smoke and streaks, cool to warm']},
+];
+const capEl=document.getElementById('cine-cap'),BLEND=2.4;
+const ease=t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2,glide=t=>(1-Math.cos(Math.PI*t))/2;
+const cine={on:false,i:0,t0:0,from:null};
+const lerp3=(a,b,t)=>[a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t,a[2]+(b[2]-a[2])*t];
+function startCine(now){cine.on=true;cine.t0=now;cine.from={pos:cam.position.toArray(),tgt:controls.target.toArray(),fov:cam.fov}}
+function stopCine(){if(!cine.on)return;cine.on=false;capEl.classList.remove('show');
+  // keep the camera where the tour left it; allow the close distance it was at
+  controls.minDistance=Math.min(3.5,cam.position.distanceTo(controls.target));controls.update()}
+function directShot(nowMs){
+  const idle=!reduce&&nowMs-lastInput>5000&&!document.hidden;
+  if(!idle){stopCine();return false}
+  const now=nowMs/1000;if(!cine.on)startCine(now);
+  const sh=SHOTS[cine.i],el=now-cine.t0;
+  let pos,tgt,fov;
+  if(el<BLEND){const k=ease(el/BLEND);pos=lerp3(cine.from.pos,sh.from,k);tgt=lerp3(cine.from.tgt,sh.tgt,k);fov=cine.from.fov+(sh.fov-cine.from.fov)*k}
+  else{const k=glide(Math.min(1,(el-BLEND)/sh.dur));pos=lerp3(sh.from,sh.to,k);tgt=sh.tgt;fov=sh.fov}
+  const r=canvas.getBoundingClientRect(),far=Math.max(1,Math.min(1.7,1.15/Math.max(0.4,r.width/Math.max(1,r.height))));   // tall stages (phones) frame wider
+  cam.position.set(tgt[0]+(pos[0]-tgt[0])*far,tgt[1]+(pos[1]-tgt[1])*far,tgt[2]+(pos[2]-tgt[2])*far);controls.target.set(...tgt);cam.lookAt(controls.target);
+  if(Math.abs(cam.fov-fov)>0.01){cam.fov=fov;cam.updateProjectionMatrix()}
+  const shown=el>BLEND*0.6&&el<BLEND+sh.dur-0.6;
+  if(shown&&capEl.dataset.i!==String(cine.i)){capEl.dataset.i=cine.i;capEl.querySelector('b').textContent=sh.cap[0];capEl.querySelector('span').textContent=sh.cap[1]}
+  capEl.classList.toggle('show',shown);
+  if(el>=BLEND+sh.dur){cine.i=(cine.i+1)%SHOTS.length;cine.t0=now;cine.from={pos,tgt,fov}}
+  return true;
+}
 setView('iso');
 let showHeat=true,showLabels=false;   // labels off by default: the clean view
 const tog=(id,fn)=>{const b=document.getElementById(id);b.onclick=()=>{const on=b.getAttribute('aria-pressed')!=='true';b.setAttribute('aria-pressed',on);fn(on)}};
@@ -674,8 +712,7 @@ canvas.addEventListener('pointerup',e=>{if(down&&Math.hypot(e.clientX-down[0],e.
 let last=performance.now();
 function frame(now){
   const dt=Math.min(0.05,(now-last)/1000);last=now;const t=now/1000;
-  controls.autoRotate=!reduce&&performance.now()-lastInput>5000;
-  controls.update();
+  if(!directShot(now))controls.update();
   const selGlow=selT<0?0:t-selT<1.2?1:0.55;   // nothing ringed until you pick a group; then a bright flash that settles to a steady ring
   fans.forEach(f=>{
     const g=GROUPS[f.group];const rpm=g.readonly?0:rpmOf(f.group);
