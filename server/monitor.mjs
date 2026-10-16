@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import { chartValues, deriveAlerts, guestFromResource, percent } from './model.mjs';
 import { coolingStatus } from './cooling.mjs';
 import { ComputeTracker, computeView } from './compute.mjs';
+import { legacyKeys, metricHistory, metricSpec, metricValues } from './metrics.mjs';
 
 export function requestProxmox(config, path) {
   if (!config) return Promise.reject(new Error('not_configured'));
@@ -35,6 +36,17 @@ export class Monitor {
   computeView() {
     const feed = this.store.getFeed('compute', 120_000), pve = this.store.getFeed('proxmox');
     return computeView(feed, pve?.data.resources, this.config.cooling);
+  }
+  /** Called on the 30-second poll so every metric is sampled at one steady cadence
+   * (3-second live readings would otherwise over-weight watched periods). */
+  recordCompute(view, now = Date.now()) {
+    if (!view || view.stale || !this.store.recordMetrics) return;
+    if (view.gpu && view.board?.fans?.length) this.store.backfillMetrics(legacyKeys(view), now);
+    this.store.recordMetrics(metricValues(view), now);
+  }
+  metricHistory(id, range, now = Date.now()) {
+    const spec = metricSpec(id, this.computeView(), name => this.store.hasMetric(name));
+    return spec ? metricHistory(this.store, spec, range, now) : null;
   }
   live() { const compute = this.computeView(); return { generatedAt: Date.now(), compute, series: this.compute.recent() }; }
   /** Concurrent callers share one in-flight poll, so a forced refresh waits for real data. */
@@ -75,9 +87,11 @@ export class Monitor {
         this.hostRates = { diskReadRate: this.rate('host.read', hostFeed.data.diskReadBytes, hostFeed.observed), diskWriteRate: this.rate('host.write', hostFeed.data.diskWriteBytes, hostFeed.observed) };
         this.hostObserved = hostFeed.observed;
       }
-      this.store.history(chartValues(this.snapshot()));
+      const snapshot = this.snapshot();
+      this.store.history(chartValues(snapshot));
+      this.recordCompute(snapshot.compute);
       this.store.prune();
-    } catch { this.lastError = 'Could not reach the Proxmox API. Last readings are retained.'; }
+    } catch { this.lastError = 'Could not reach the Proxmox API. Last readings are retained.'; try { this.recordCompute(this.computeView()); } catch {} }
 
   }
   snapshot() {

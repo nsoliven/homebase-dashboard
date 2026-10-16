@@ -76,6 +76,39 @@ collection for 12 seconds at a time; otherwise the bridge collects every 30
 seconds. Fan spin follows reported fan duty (GPU) or RPM (board), and glows
 follow load and temperature. Reduced-motion users get a static illustration.
 
+Fans never strobe: visual speed is capped below the wagon-wheel threshold and
+crisp blades blend (opacity only) into trailing copies and a rotational blur
+disc as speed rises; speed changes ease in. Reduced motion shows the blur that
+matches the current speed without spinning.
+
+Every part of the card and CPU package is a focusable hotspot. Hover or focus
+spotlights it; tap, click, Enter, or Space opens a popover with the reading, the
+last hour, and a "View history" action. Esc, an outside tap, or a second tap
+closes it and returns focus.
+
+## Per-metric history
+
+`GET /api/metrics/<id>?range=1h|24h|7d` (session required) returns chart points
+(min / avg / max) and statistics computed on the server over every stored
+sample in range: current, average, min, max, nearest-rank P95 and P99, and the
+times of the peak and low. IDs resolve through a fixed table in
+`server/metrics.mjs` (GPU, CPU, and per-CCD metrics) plus board fan and
+temperature sensor IDs that the hypervisor currently reports or that already
+have stored samples. Request text is never placed in SQL.
+
+Samples are written once per 30-second monitor poll, so live 3-second viewing
+never over-weights a period. Two tiers keep storage bounded:
+
+- `metric_raw`: every 30-second sample for 25 hours (1 h and 24 h views).
+- `metric_buckets`: 5-minute buckets for 8 days with count, sum, min, max,
+  the times of the min and max, and the bucket's samples (7 d view). Percentiles
+  over 7 days therefore remain exact.
+
+With 29 metrics this measured about 8.6 MB at steady state (1.8 MB raw,
+6.8 MB buckets). Old rows are pruned every ten minutes. The tables are
+created automatically on start. On the first poll with GPU and board readings,
+matching keys already in `history` are imported once.
+
 ## Data boundaries
 
 Runtime configuration is supplied by `HOMEBASE_CONFIG` outside this repository.

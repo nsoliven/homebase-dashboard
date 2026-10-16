@@ -7,6 +7,12 @@ import { summarize } from '../server/statistics.mjs';
 import { coolingStatus } from '../server/cooling.mjs';
 import * as demoCompute from './demo-compute.mjs';
 import { setScenario } from './demo-compute.mjs';
+import { Store } from '../server/store.mjs';
+import { METRIC_ID, RANGES, metricHistory, metricSpec } from '../server/metrics.mjs';
+
+// In-memory only; synthetic samples through the production metric tiers.
+const metricStore = new Store(':memory:');
+demoCompute.seedHistory(metricStore);
 
 const root = resolve(fileURLToPath(new URL('../dist/', import.meta.url)));
 const GiB = 1024 ** 3;
@@ -120,6 +126,11 @@ http.createServer(async(req,res)=>{
     else{const s=snapshot.sources.find(s=>s.id===id||id.startsWith('guest:')&&s.id==='host');if(s)s.observedAt=at;if(id==='proxmox')snapshot.observedAt=at;}
     lastRefresh[id]=at;
     res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({source:id,status:'updated',observedAt:at,snapshot:demoSnapshot(),...(id==='proxy'?{integrations}:{}),...(id==='compute'?{live:demoCompute.live()}:{})}));return;
+  }
+  const metricRoute=url.pathname.match(/^\/api\/metrics\/([a-zA-Z0-9.]{1,60})$/);
+  if(metricRoute){
+    const range=url.searchParams.get('range')||'24h',spec=METRIC_ID.test(metricRoute[1])&&Object.hasOwn(RANGES,range)?metricSpec(metricRoute[1],demoCompute.view(),name=>metricStore.hasMetric(name)):null;
+    res.writeHead(spec?200:404,{'Content-Type':'application/json'});res.end(JSON.stringify(spec?metricHistory(metricStore,spec,range):{error:'Unknown metric.'}));return;
   }
   if(url.pathname==='/api/session')data={user:{name:'Demo operator'},csrf:'sample-only',configured:true};
   else if(['/api/snapshot','/api/refresh'].includes(url.pathname))data=demoSnapshot();

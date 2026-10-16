@@ -14,7 +14,66 @@ export class Store {
       CREATE TABLE IF NOT EXISTS history(ts INTEGER PRIMARY KEY, data TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS sessions(id TEXT PRIMARY KEY, expires INTEGER NOT NULL, user TEXT NOT NULL, csrf TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS logins(id TEXT PRIMARY KEY, expires INTEGER NOT NULL, data TEXT NOT NULL);
-      CREATE TABLE IF NOT EXISTS acknowledgements(id TEXT PRIMARY KEY, signature TEXT NOT NULL, created INTEGER NOT NULL);`);
+      CREATE TABLE IF NOT EXISTS acknowledgements(id TEXT PRIMARY KEY, signature TEXT NOT NULL, created INTEGER NOT NULL);
+      CREATE TABLE IF NOT EXISTS meta(key TEXT PRIMARY KEY, value TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS metric_ids(id INTEGER PRIMARY KEY, name TEXT UNIQUE NOT NULL);
+      CREATE TABLE IF NOT EXISTS metric_raw(metric INTEGER NOT NULL, ts INTEGER NOT NULL, value REAL NOT NULL, PRIMARY KEY(metric, ts)) WITHOUT ROWID;
+      CREATE TABLE IF NOT EXISTS metric_buckets(metric INTEGER NOT NULL, bucket INTEGER NOT NULL, count INTEGER NOT NULL, sum REAL NOT NULL,
+        min REAL NOT NULL, max REAL NOT NULL, min_ts INTEGER NOT NULL, max_ts INTEGER NOT NULL, last_ts INTEGER NOT NULL, samples TEXT NOT NULL,
+        PRIMARY KEY(metric, bucket)) WITHOUT ROWID;`);
+    this.metricIds = new Map(this.db.prepare('SELECT id,name FROM metric_ids').all().map(r => [r.name, r.id]));
+    this.metricsPrunedAt = 0;
+  }
+  metricId(name, create = false) {
+    if (!this.metricIds.has(name) && create) this.metricIds.set(name, Number(this.db.prepare('INSERT INTO metric_ids(name) VALUES(?)').run(name).lastInsertRowid));
+    return this.metricIds.get(name) ?? null;
+  }
+  hasMetric(name) { return this.metricIds.has(name); }
+  /** 30-second samples go to the raw tier and are folded into 5-minute buckets.
+   * A timestamp is recorded once per metric, so buckets never double-count. */
+  recordMetrics(values, ts = Date.now()) {
+    const raw = this.db.prepare('INSERT OR IGNORE INTO metric_raw VALUES(?,?,?)');
+    const bucket = this.db.prepare(`INSERT INTO metric_buckets VALUES(?,?,1,?,?,?,?,?,?,?) ON CONFLICT(metric,bucket) DO UPDATE SET
+      count=count+1, sum=sum+excluded.sum, min_ts=CASE WHEN excluded.min<min THEN excluded.min_ts ELSE min_ts END,
+      max_ts=CASE WHEN excluded.max>max THEN excluded.max_ts ELSE max_ts END, min=MIN(min,excluded.min), max=MAX(max,excluded.max),
+      last_ts=MAX(last_ts,excluded.last_ts), samples=samples||','||excluded.samples`);
+    this.db.exec('BEGIN');
+    try {
+      for (const [name, value] of Object.entries(values)) {
+        if (!Number.isFinite(value)) continue;
+        const id = this.metricId(name, true), v = Math.round(value * 1000) / 1000;
+        if (ts >= Date.now() - 25 * 3600_000 && !raw.run(id, ts, v).changes) continue;
+        bucket.run(id, Math.floor(ts / 300_000) * 300_000, v, v, v, ts, ts, ts, String(v));
+      }
+      this.db.exec('COMMIT');
+    } catch (error) { this.db.exec('ROLLBACK'); throw error; }
+  }
+  metricRaw(name, from, to) {
+    const id = this.metricId(name);
+    return id === null ? [] : this.db.prepare('SELECT ts,value FROM metric_raw WHERE metric=? AND ts>? AND ts<=? ORDER BY ts').all(id, from, to);
+  }
+  metricBuckets(name, from, to) {
+    const id = this.metricId(name);
+    return id === null ? [] : this.db.prepare('SELECT bucket,count,sum,min,max,min_ts,max_ts,last_ts,samples FROM metric_buckets WHERE metric=? AND bucket>=? AND bucket<=? ORDER BY bucket').all(id, from, to)
+      .map(b => ({ bucket: b.bucket, count: b.count, sum: b.sum, min: b.min, max: b.max, minTs: b.min_ts, maxTs: b.max_ts, lastTs: b.last_ts, samples: b.samples.split(',').map(Number) }));
+  }
+  pruneMetrics(now = Date.now(), force = false) {
+    if (!force && now - this.metricsPrunedAt < 600_000) return;
+    this.metricsPrunedAt = now;
+    this.db.prepare('DELETE FROM metric_raw WHERE ts<?').run(now - 25 * 3600_000);
+    this.db.prepare('DELETE FROM metric_buckets WHERE bucket<?').run(now - 8 * 86400_000);
+  }
+  /** One-time import of matching keys already in `history` (real 30-second samples). */
+  backfillMetrics(map, now = Date.now()) {
+    if (this.db.prepare("SELECT 1 FROM meta WHERE key='metrics.backfill'").get()) return 0;
+    let rows = 0;
+    for (const row of this.recent(now - 7 * 86400_000)) {
+      const values = {};
+      for (const [id, keys] of Object.entries(map)) { const key = keys.find(k => Number.isFinite(row.values[k])); if (key) values[id] = row.values[key]; }
+      if (Object.keys(values).length) { this.recordMetrics(values, row.ts); rows++; }
+    }
+    this.db.prepare("INSERT OR REPLACE INTO meta VALUES('metrics.backfill',?)").run(String(now));
+    return rows;
   }
   feed(id, data, observed = Date.now()) {
     this.db.prepare('INSERT OR REPLACE INTO feeds VALUES(?,?,?,?)').run(id, observed, Date.now(), JSON.stringify(data));
@@ -74,6 +133,7 @@ export class Store {
   prune() {
     const now = Date.now();
     this.db.prepare('DELETE FROM history WHERE ts<?').run(now - 7 * 86400_000);
+    this.pruneMetrics(now);
     this.db.prepare('DELETE FROM sessions WHERE expires<?').run(now);
     this.db.prepare('DELETE FROM logins WHERE expires<?').run(now);
     this.db.prepare('DELETE FROM acknowledgements WHERE created<?').run(now - 30 * 86400_000);

@@ -1,14 +1,15 @@
 // Synthetic GPU/CPU readings for the isolated demo. Never reads real hardware.
 // Two scenarios: an idle host and a simulated sustained GPU + CPU load.
 import { coolingStatus } from '../server/cooling.mjs';
+import { metricValues } from '../server/metrics.mjs';
 
 let scenario = 'idle';
 export const setScenario = name => { if (['idle', 'load'].includes(name)) scenario = name; return scenario; };
 const wave = (t, period, amp) => Math.sin(t / period) * amp;
 const jitter = (t, seed, amp) => (Math.sin(t / 997 + seed * 12.9898) * 43758.5453 % 1) * amp;
 const cooling = { channels: [
-  { id: 'demo-cpu-fan', role: 'fan', confirmed: true, maxRpm: 2450 }, { id: 'demo-pump', role: 'pump', confirmed: true, maxRpm: 3200 },
-  ...[2, 3, 4, 5].map(n => ({ id: `demo-sys-${n}`, role: 'fan', confirmed: true, maxRpm: 2000 })),
+  { id: 'd0000000000000f1', role: 'fan', confirmed: true, maxRpm: 2450 }, { id: 'd0000000000000f2', role: 'pump', confirmed: true, maxRpm: 3200 },
+  ...[2, 3, 4, 5].map(n => ({ id: `d0000000000000a${n}`, role: 'fan', confirmed: true, maxRpm: 2000 })),
 ] };
 
 function reading(ts, mode) {
@@ -27,7 +28,7 @@ function reading(ts, mode) {
     return { cpu: i, core: core < 6 ? core : core + 2, ccd, mhz: load ? 5050 + wave(t + i, 3, 60) : 4700 + wave(t + i, 5, 300), load: Math.max(0, Math.min(100, base + wave(t + i * 3, 2.3, load ? 10 : 6) + jitter(t, i, 6))) };
   });
   const util = threads.reduce((a, x) => a + x.load, 0) / threads.length;
-  const fans = [['demo-cpu-fan', 'CPU Fan', load ? 2050 : 1180], ['demo-pump', 'Pump Fan', 3200], ['demo-sys-1', 'System Fan #1', 0], ...[2, 3, 4, 5].map(n => [`demo-sys-${n}`, `System Fan #${n}`, (load ? 1480 : 820) + n * 40]), ['demo-sys-6', 'System Fan #6', 0]]
+  const fans = [['d0000000000000f1', 'CPU Fan', load ? 2050 : 1180], ['d0000000000000f2', 'Pump Fan', 3200], ['d0000000000000a1', 'System Fan #1', 0], ...[2, 3, 4, 5].map(n => [`d0000000000000a${n}`, `System Fan #${n}`, (load ? 1480 : 820) + n * 40]), ['d0000000000000a6', 'System Fan #6', 0]]
     .map(([id, name, rpm]) => ({ id, name, label: `sample / ${name}`, rpm: rpm ? Math.round(rpm + wave(t, 13, 12)) : 0 }));
   return {
     gpu, gpuError: null,
@@ -36,10 +37,19 @@ function reading(ts, mode) {
       clockAverage: threads.reduce((a, x) => a + x.mhz, 0) / 24, clockMax: Math.max(...threads.map(x => x.mhz)) },
     board: { name: 'Sample X870E board', tctl: load ? 90.5 + wave(t, 20, 1) : 52 + wave(t, 30, 1), vcore: load ? 1.284 : 1.032, ccds: [{ id: 1, temperature: load ? 88.4 : 48.6 }, { id: 2, temperature: load ? 85.9 : 46.1 }],
       fans: coolingStatus(fans, cooling).fans,
-      temperatures: [['VRM MOS', load ? 58.5 : 44], ['PCH', 41.5], ['CPU Socket', load ? 47 : 39.5], ['System', 38.5]].map(([name, value], i) => ({ id: `demo-t${i}`, name, value })) },
+      temperatures: [['VRM MOS', load ? 58.5 : 44], ['PCH', 41.5], ['CPU Socket', load ? 47 : 39.5], ['System', 38.5]].map(([name, value], i) => ({ id: `d0000000000000e${i}`, name, value })) },
   };
 }
 
+/** Seven days of synthetic 30-second samples through the real metric tiers.
+ * Evenings run a simulated GPU job so the 24 h and 7 d views have shape. */
+export function seedHistory(store, now = Date.now()) {
+  const n = 7 * 2880;
+  for (let i = 0; i < n; i++) {
+    const ts = now - (n - 1 - i) * 30_000, hour = new Date(ts).getHours(), busy = (hour >= 19 && hour < 23) || (hour === 13 && new Date(ts).getDay() % 2 === 0);
+    store.recordMetrics(metricValues({ ...reading(ts, busy ? 'load' : 'idle'), stale: false }), ts);
+  }
+}
 export function view() { const ts = Date.now(); return { ...reading(ts, scenario), observedAt: ts - 1200, stale: false }; }
 export function live() {
   const now = Date.now(), series = [];
