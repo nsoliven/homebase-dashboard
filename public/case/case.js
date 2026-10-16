@@ -21,15 +21,16 @@ const HEADERS=[
 ];
 const GROUPS={
  rad:{name:'Radiator',count:'3 × 120 mm',dir:'Exhaust · right grille',color:'#4a5fd6',src:'tctl',temp:61,duty:38,curve:[[50,20],[80,45],[95,60],[100,100]]},
- top:{name:'Top',count:'2 × 120 mm',dir:'Exhaust · up',color:'#e0832f',src:'system',temp:39,duty:42,curve:[[30,25],[50,35],[65,50],[80,60]]},
- floor:{name:'Floor intake',count:'2 × 140 mm',dir:'Intake · from below',color:'#2f9a62',src:'system',temp:39,duty:32,curve:[[30,25],[50,35],[65,50],[80,60]]},
- rear:{name:'Rear',count:'2 × 120 mm',dir:'',flow:'in',color:'#9b59c9',src:'system',temp:39,duty:40,curve:[[30,25],[50,35],[65,50],[80,60]]},
+ top:{name:'Top',count:'2 × 120 mm',dir:'Exhaust · up',color:'#e0832f',src:'system',temp:39,duty:42,curve:[[50,40],[60,55],[65,70],[68,100]]},
+ floor:{name:'Floor intake',count:'2 × 140 mm',dir:'Intake · from below',color:'#2f9a62',src:'system',temp:39,duty:32,curve:[[50,40],[60,55],[65,80],[68,100]]},
+ rear:{name:'Rear',count:'2 × 120 mm',dir:'',flow:'in',color:'#9b59c9',src:'system',temp:39,duty:40,curve:[[50,40],[60,55],[65,70],[68,100]]},
  pump:{name:'AIO pump',count:'Galahad II',dir:'Coolant loop',color:'#3f8fd8',src:'tctl',temp:61,duty:100,curve:[[30,100],[100,100]],fixed:true},
  gpu:{name:'GPU fans',count:'3 × 80 mm · driver',dir:'Read-only',color:'#8d95a7',src:'gpu',temp:41,duty:0,curve:[[50,0],[60,30],[75,55],[85,80]],readonly:true},
 };
 const rearDir=()=>GROUPS.rear.flow==='in'?'Intake · from the back':'Exhaust · out the back';
 GROUPS.rear.dir=rearDir();
-const rpmOf=g=>{const h=HEADERS.filter(h=>h.group===g);return h.length?Math.round(h.reduce((a,b)=>a+b.rpm,0)/h.length):0};
+const liveRpm={};   // filled from prox when fan control is connected
+const rpmOf=g=>{if(liveRpm[g]!=null)return liveRpm[g];const h=HEADERS.filter(h=>h.group===g);return h.length?Math.round(h.reduce((a,b)=>a+b.rpm,0)/h.length):0};
 // rough fan airflow: ~60 CFM for a 120 mm fan at 1,500 rpm, scaling with rpm and diameter³; radiators restrict ~35%
 const cfm=(rpm,size)=>60*(rpm/1500)*Math.pow(size/1.2,3);
 let sel='rad';
@@ -733,6 +734,8 @@ document.getElementById('dir-in').onclick=()=>setRear('in');document.getElementB
 /* ---------- curve editor ---------- */
 const svg=document.getElementById('curve');const X0=38,X1=344,Y0=190,Y1=14;const TMIN=20,TMAX=100;
 const sx=t=>X0+(t-TMIN)/(TMAX-TMIN)*(X1-X0), sy=d=>Y0-d/100*(Y0-Y1), it=x=>TMIN+(x-X0)/(X1-X0)*(TMAX-TMIN), id_=y=>(Y0-y)/(Y0-Y1)*100;
+// the curves saved in the BIOS on 2026-10-11 (same as the fan service's defaults)
+const BIOS_CURVES={rad:[[50,20],[80,45],[95,60],[100,100]],floor:[[50,40],[60,55],[65,80],[68,100]],top:[[50,40],[60,55],[65,70],[68,100]],rear:[[50,40],[60,55],[65,70],[68,100]]};
 const PRESETS={silent:[[40,20],[65,30],[85,45],[95,60]],cool:[[30,35],[50,45],[70,55],[85,60]]};
 function drawCurve(){
   const g=GROUPS[sel];const pts=g.curve;const ro=g.readonly||g.fixed;
@@ -755,9 +758,10 @@ svg.addEventListener('pointermove',e=>{if(drag===null)return;const r=svg.getBoun
   const lo=drag?pts[drag-1][0]+2:TMIN,hi=drag<pts.length-1?pts[drag+1][0]-2:TMAX;
   pts[drag]=[Math.round(Math.max(lo,Math.min(hi,it(x)))),Math.round(Math.max(0,Math.min(100,id_(y))))];
   document.querySelectorAll('[data-preset]').forEach(b=>b.setAttribute('aria-pressed','false'));drawCurve()});
-svg.addEventListener('pointerup',()=>drag=null);
-svg.addEventListener('keydown',e=>{const c=e.target.closest('.pt');if(!c)return;const i=+c.dataset.i,p=GROUPS[sel].curve[i];const k={ArrowUp:[0,2],ArrowDown:[0,-2],ArrowLeft:[-1,0],ArrowRight:[1,0]}[e.key];if(!k)return;e.preventDefault();p[0]+=k[0];p[1]=Math.max(0,Math.min(100,p[1]+k[1]));drawCurve();svg.querySelector(`.pt[data-i="${i}"]`)?.focus()});
-document.querySelectorAll('[data-preset]').forEach(b=>b.onclick=()=>{const g=GROUPS[sel];if(g.readonly||g.fixed)return;const p=b.dataset.preset;g.curve=(p==='bios'?(sel==='rad'?[[50,20],[80,45],[95,60],[100,100]]:[[30,25],[50,35],[65,50],[80,60]]):PRESETS[p]).map(x=>[...x]);document.querySelectorAll('[data-preset]').forEach(c=>c.setAttribute('aria-pressed',c===b));drawCurve()});
+svg.addEventListener('pointerup',()=>{if(drag!==null)sendCurve(sel);drag=null});
+let keyTimer=0;
+svg.addEventListener('keydown',e=>{const c=e.target.closest('.pt');if(!c)return;clearTimeout(keyTimer);keyTimer=setTimeout(()=>sendCurve(sel),600);const i=+c.dataset.i,p=GROUPS[sel].curve[i];const k={ArrowUp:[0,2],ArrowDown:[0,-2],ArrowLeft:[-1,0],ArrowRight:[1,0]}[e.key];if(!k)return;e.preventDefault();p[0]+=k[0];p[1]=Math.max(0,Math.min(100,p[1]+k[1]));drawCurve();svg.querySelector(`.pt[data-i="${i}"]`)?.focus()});
+document.querySelectorAll('[data-preset]').forEach(b=>b.onclick=()=>{const g=GROUPS[sel];if(g.readonly||g.fixed)return;const p=b.dataset.preset;g.curve=(p==='bios'?BIOS_CURVES[sel]:PRESETS[p]).map(x=>[...x]);document.querySelectorAll('[data-preset]').forEach(c=>c.setAttribute('aria-pressed',c===b));drawCurve();sendCurve(sel)});
 
 /* ---------- side panel ---------- */
 let selT=-1;
@@ -768,7 +772,63 @@ function select(k,quiet){sel=k;const g=GROUPS[k];if(!quiet){selT=performance.now
   groupEls.forEach(b=>{b.setAttribute('aria-selected',b.dataset.g===k);b.title=rowTitle(b.dataset.g)});
   labelEls.forEach(b=>b.setAttribute('aria-pressed',b.dataset.g===k));
   document.querySelectorAll('[data-preset]').forEach(b=>{b.disabled=!!(g.readonly||g.fixed)});
+  document.getElementById('identify').disabled=!!(g.readonly||g.fixed);
   drawCurve();
 }
 balance();select('rad',true);
+
+/* ---------- live fan control (Homebase backend → prox) ----------
+   Same-origin calls with the dashboard session. If there's no session or no fan service
+   (for example on the public demo), everything stays modeled. A curve change applies when you let go. */
+const live={on:false,csrf:null,mode:null,editing:false,timer:0};
+const ctlEl=document.getElementById('ctl'),applyEl=document.getElementById('apply-state'),identifyEl=document.getElementById('identify'),noteEl=document.getElementById('live-note');
+const CONTROLLED=['rad','top','floor','rear'];
+const say=(text,tone='')=>{applyEl.hidden=!text;applyEl.textContent=text;applyEl.className='apply '+tone};
+async function api(method,body){
+  const r=await fetch('/api/fans',{method,credentials:'same-origin',headers:{'Content-Type':'application/json',...(live.csrf?{'X-Homebase-CSRF':live.csrf}:{})},body:body?JSON.stringify(body):undefined});
+  if(!(r.headers.get('content-type')||'').includes('json'))throw new Error('unavailable');
+  const data=await r.json();if(!r.ok||data.error)throw new Error(data.error||'failed');return data;
+}
+function applyStatus(st){
+  const avg=a=>a&&a.length?Math.round(a.reduce((x,y)=>x+y,0)/a.length):null;
+  for(const[g,v]of Object.entries(st.groups||{})){if(!GROUPS[g])continue;liveRpm[g]=avg(v.rpm)??0;const d=v.target??avg(v.duty);if(d!=null)GROUPS[g].duty=Math.round(d)}
+  if(st.temps?.tctl!=null){GROUPS.rad.temp=Math.round(st.temps.tctl);GROUPS.pump.temp=GROUPS.rad.temp}
+  if(st.temps?.system!=null)['top','floor','rear'].forEach(g=>GROUPS[g].temp=Math.round(st.temps.system));
+  if(!live.editing&&drag===null)for(const g of CONTROLLED)if(st.curves?.[g])GROUPS[g].curve=st.curves[g].map(p=>[...p]);
+  live.mode=st.mode;
+  document.getElementById('mode-curves').setAttribute('aria-pressed',st.requestedMode==='curves');
+  document.getElementById('mode-bios').setAttribute('aria-pressed',st.requestedMode!=='curves');
+  groupEls.forEach(b=>{const g=GROUPS[b.dataset.g];b.querySelector('.rpm').textContent=g.readonly?'auto':rpmOf(b.dataset.g).toLocaleString();b.querySelector('.duty b').style.width=g.duty+'%'});
+  labelEls.forEach(b=>{const k=b.dataset.g;b.querySelector('b').textContent=GROUPS[k].readonly?'auto':rpmOf(k).toLocaleString()+' rpm'});
+  const msg=st.error?`BIOS in charge · ${st.error}`:st.mode==='curves'?'Live from prox · your curves are running':'Live from prox · BIOS curves in charge';
+  noteEl.textContent=msg;parent!==window&&parent.postMessage({type:'homebase-case-live',live:true,mode:st.mode,error:st.error||null},location.origin);
+  buildFlow();balance();select(sel,true);
+}
+async function poll(){
+  clearTimeout(live.timer);
+  if(document.visibilityState==='visible'){try{applyStatus(await api('GET'))}catch{}}
+  live.timer=setTimeout(poll,3000);
+}
+async function sendCurve(g){
+  if(!live.on||!CONTROLLED.includes(g))return;
+  live.editing=true;say('Applying…');
+  try{const st=await api('POST',{group:g,curve:GROUPS[g].curve});live.editing=false;applyStatus(st);say(`Applied · ${GROUPS[g].name} at ${GROUPS[g].duty}% now`,'ok')}
+  catch(e){live.editing=false;say(`Not applied · ${e.message}`,'bad');poll()}
+}
+async function setMode(mode){
+  if(!live.on)return;say(mode==='curves'?'Turning your curves on…':'Handing back to the BIOS…');
+  try{applyStatus(await api('POST',{mode}));say(mode==='curves'?'Your curves are running':'BIOS curves are in charge','ok')}catch(e){say(`Not changed · ${e.message}`,'bad')}
+}
+document.getElementById('mode-curves').onclick=()=>setMode('curves');
+document.getElementById('mode-bios').onclick=()=>setMode('bios');
+identifyEl.onclick=async()=>{if(!live.on||!CONTROLLED.includes(sel))return;say(`${GROUPS[sel].name} spinning up to 60% for 6 s…`);try{await api('POST',{pulse:sel});setTimeout(poll,1500)}catch(e){say(`Not changed · ${e.message}`,'bad')}};
+(async()=>{
+  try{
+    const s=await fetch('/api/session',{credentials:'same-origin'}).then(r=>r.json());
+    if(!s?.user||!s.csrf)return;
+    live.csrf=s.csrf;const st=await api('GET');
+    live.on=true;ctlEl.hidden=false;identifyEl.hidden=false;applyStatus(st);
+    live.timer=setTimeout(poll,3000);document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')poll()});
+  }catch{}
+})();
 })();

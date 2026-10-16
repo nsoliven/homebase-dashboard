@@ -12,6 +12,7 @@ import { sanitizeFeed } from './model.mjs';
 import { RefreshCoordinator, SOURCE_ID } from './refresh.mjs';
 import { METRIC_ID, RANGES } from './metrics.mjs';
 import { GROUP_ID } from './compute-groups.mjs';
+import { Fans, validFanRequest } from './fans.mjs';
 
 const mime = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.woff2': 'font/woff2', '.txt': 'text/plain; charset=utf-8' };
 const json = (res, status, data) => { res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }); res.end(JSON.stringify(data)); };
@@ -29,6 +30,7 @@ export function createApp(config, store, monitor, auth = new Auth(config.oidc, s
   const limiter = new Map();
   const origin = new URL(config.publicUrl).origin;
   const refresh = new RefreshCoordinator({ config, store, monitor, integrations });
+  const fans = new Fans(config.fans);
   const collectorFor = req => { const provided = (req.headers.authorization || '').replace(/^Bearer /, ''); return Object.entries(config.collectors || {}).find(([, c]) => timingSafeEqual(Buffer.from(hash(c.key)), Buffer.from(hash(provided)))); };
   const handler = async (req, res) => {
     res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -78,6 +80,17 @@ export function createApp(config, store, monitor, auth = new Auth(config.oidc, s
       if (url.pathname.startsWith('/api/') && !session) return json(res, 401, { error: 'Sign in to Homebase.' });
       if (req.method === 'POST' && (req.headers.origin !== origin || req.headers['x-homebase-csrf'] !== session?.csrf)) return json(res, 403, { error: 'Request verification failed.' });
       if (url.pathname === '/api/logout' && req.method === 'POST') { store.logout(cookie(req, sessionCookie)); res.setHeader('Set-Cookie', setCookie(sessionCookie, '', 0)); return json(res, 200, { ok: true }); }
+      // Fan control on the hypervisor: live status, and curve / mode / identify changes.
+      if (url.pathname === '/api/fans' && (req.method === 'GET' || req.method === 'POST')) {
+        if (!fans.configured) return json(res, 404, { error: 'Fan control is not configured.' });
+        try {
+          if (req.method === 'GET') return json(res, 200, await fans.status());
+          const change = validFanRequest(await body(req));
+          if (!change) return json(res, 400, { error: 'Invalid fan change.' });
+          const result = await fans.set(change);
+          return json(res, result.error ? 400 : 200, result);
+        } catch { return json(res, 502, { error: 'The fan service did not answer. The BIOS curves stay in charge.' }); }
+      }
       if (url.pathname === '/api/integrations' && req.method === 'GET') return json(res, 200, await integrations.snapshot());
       const icon=url.pathname.match(/^\/api\/(apps|branding)\/([a-z0-9-]{1,80})\/icon$/);
       if(icon&&['GET','HEAD'].includes(req.method)) {
