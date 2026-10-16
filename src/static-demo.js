@@ -39,3 +39,9 @@ export async function staticRefresh(id) {
   await new Promise(r => setTimeout(r, 900));
   return { source: id, status: 'updated', observedAt: Date.now(), snapshot, ...(integrations ? { integrations } : {}), ...(live ? { live } : {}) };
 }
+
+/** Link props for opening a private app. The live demo has no backend, so app links are inert there. */
+export function appLink(id) {
+  if (STATIC_DEMO) return { href: '#', onClick: e => e.preventDefault(), title: 'App links are off in the live demo', 'aria-disabled': 'true' };
+  return { href: `/api/apps/${id}/open`, target: '_blank', rel: 'noopener noreferrer' };
+}
