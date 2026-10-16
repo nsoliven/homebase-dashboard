@@ -71,6 +71,10 @@ html.embed #view{height:clamp(460px,calc(var(--host-vh,900px) * .74),900px);back
 .chip[disabled]{opacity:.4;cursor:not-allowed}
 .curve svg{display:block;width:100%;height:auto;touch-action:none}
 .curve .pt{cursor:grab}
+.ctl{display:flex;align-items:center;justify-content:space-between;gap:10px}
+.apply{font-size:12px;color:var(--muted);margin-top:6px}
+.apply.ok{color:var(--ok)}
+.apply.bad{color:var(--bad)}
 .bal-row{display:grid;grid-template-columns:58px minmax(0,1fr) 64px;align-items:center;gap:10px;font-size:12px;color:var(--muted);margin-top:6px}
 .bal-row b{font-family:var(--font-mono);font-weight:500;color:var(--fg);text-align:right;font-variant-numeric:tabular-nums}
 .bal{height:6px;border-radius:4px;background:var(--line);overflow:hidden}
@@ -87,7 +91,7 @@ html.embed #view{height:clamp(460px,calc(var(--host-vh,900px) * .74),900px);back
 <div class="wrap">
   <header class="top">
     <h1>prox · The Tower 500</h1>
-    <span class="muted">Modeled readings · fan control not connected yet</span>
+    <span class="muted" id="live-note">Modeled readings · fan control not connected</span>
   </header>
 
   <div class="bar" aria-label="View controls">
@@ -134,6 +138,7 @@ html.embed #view{height:clamp(460px,calc(var(--host-vh,900px) * .74),900px);back
     </section>
 
     <aside class="side" aria-label="Fans">
+      <div class="ctl" id="ctl" hidden><span class="sec-h" style="margin:0">Control</span><div class="seg" role="group" aria-label="Who drives the fans"><button id="mode-curves" aria-pressed="false" title="Homebase runs the curves below">Your curves</button><button id="mode-bios" aria-pressed="true" title="Hand every fan back to the BIOS curve">BIOS</button></div></div>
       <div>
         <div class="sec-h"><span>Fans</span><span>rpm</span></div>
         <div class="groups" id="groups" role="listbox" aria-label="Fan groups"></div>
@@ -141,8 +146,9 @@ html.embed #view{height:clamp(460px,calc(var(--host-vh,900px) * .74),900px);back
       <div>
         <div class="detail-head"><h2 id="g-name">Radiator</h2><span id="g-meta">38% · 61°C</span></div>
         <div class="chips" id="dir-row" role="group" aria-label="Rear fan direction" hidden><button class="chip" id="dir-in" aria-pressed="true">Intake</button><button class="chip" id="dir-out" aria-pressed="false">Exhaust</button></div>
-        <div class="chips" role="group" aria-label="Curve presets"><button class="chip" data-preset="silent" aria-pressed="false">Silent</button><button class="chip" data-preset="bios" aria-pressed="true">Your BIOS</button><button class="chip" data-preset="cool" aria-pressed="false">Cold</button></div>
+        <div class="chips" role="group" aria-label="Curve presets"><button class="chip" data-preset="silent" aria-pressed="false">Silent</button><button class="chip" data-preset="bios" aria-pressed="true">Your BIOS</button><button class="chip" data-preset="cool" aria-pressed="false">Cold</button><button class="chip" id="identify" hidden title="Spin this group to 60% for 6 s so you can see which fans it drives">Identify</button></div>
         <div class="curve" title="Temperature → fan duty. Drag a point to shape the curve."><svg id="curve" viewBox="0 0 360 220" role="img" aria-label="Fan curve editor"></svg></div>
+        <div class="apply" id="apply-state" role="status" hidden></div>
       </div>
       <div title="Estimated from fan RPM and size; radiators restrict about 35%. More intake than exhaust keeps dust out.">
         <div class="sec-h"><span>Airflow</span><span class="tag" id="press">Balanced</span></div>
