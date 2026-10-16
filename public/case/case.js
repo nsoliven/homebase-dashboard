@@ -60,12 +60,16 @@ setStage(false);
 /* WASD to fly, Space up, Shift down: after you click the stage, until you click elsewhere or leave the window.
    Camera and orbit point move together, so dragging still orbits where you have flown to. */
 const keys=new Set();let keysOn=false;
-canvas.addEventListener('pointerdown',()=>{keysOn=true},{capture:true});
+// the orbit controls cancel the click's default focus, so focus the stage ourselves; inside the dashboard frame this is what routes keys here
+canvas.tabIndex=0;canvas.style.outline='none';
+canvas.addEventListener('pointerdown',()=>{keysOn=true;canvas.focus({preventScroll:true})},{capture:true});
 document.addEventListener('pointerdown',e=>{if(e.target!==canvas){keysOn=false;keys.clear()}});
 addEventListener('blur',()=>{keysOn=false;keys.clear()});
 addEventListener('keydown',e=>{if(!keysOn||e.target.closest?.('input,select,textarea'))return;const k=e.key===' '?'space':e.key.toLowerCase();if(!['w','a','s','d','space','shift'].includes(k))return;keys.add(k);touched();e.preventDefault()});
 addEventListener('keyup',e=>keys.delete(e.key===' '?'space':e.key.toLowerCase()));
 const _f=new THREE.Vector3(),_r=new THREE.Vector3(),_m=new THREE.Vector3();
+// read-only camera readout for tests and debugging
+window.homebaseCase={camera:()=>({pos:cam.position.toArray().map(v=>+v.toFixed(3)),target:controls.target.toArray().map(v=>+v.toFixed(3)),keys:[...keys],keysOn,tour:cine.on})};
 function fly(dt){
   if(!keys.size)return;touched();
   cam.getWorldDirection(_f);_r.crossVectors(_f,cam.up).normalize();
