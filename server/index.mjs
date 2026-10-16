@@ -36,6 +36,11 @@ export function createApp(config, store, monitor, auth = new Auth(config.oidc, s
     res.setHeader('X-Frame-Options', 'DENY');
     res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'");
     const url = new URL(req.url, config.publicUrl);
+    // The 3D case view is a static page the dashboard frames, so only it may be framed, and only by Homebase itself.
+    if (url.pathname === '/case/' || url.pathname.startsWith('/case/')) {
+      res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+      res.setHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'self'; form-action 'self'");
+    }
     try {
       if (url.pathname === '/healthz' && req.method === 'GET') return json(res, 200, { status: 'ok', version: '1.0.0' });
       if (url.pathname === '/api/ingest' && req.method === 'POST') {
@@ -130,6 +135,7 @@ export function createApp(config, store, monitor, auth = new Auth(config.oidc, s
       let path;
       try { path = resolve(dist, `.${decodeURIComponent(url.pathname)}`); } catch { return json(res, 400, { error: 'Invalid path.' }); }
       if (path !== dist && !path.startsWith(dist + sep)) return json(res, 403, { error: 'Invalid path.' });
+      if (existsSync(path) && statSync(path).isDirectory() && existsSync(resolve(path, 'index.html'))) path = resolve(path, 'index.html');
       if (!existsSync(path) || !statSync(path).isFile()) {
         if (extname(path)) return json(res, 404, { error: 'Not found.' });
         path = resolve(dist, 'index.html');

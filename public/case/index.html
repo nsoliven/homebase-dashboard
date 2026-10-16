@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tower 500 Fan Controller</title>
+<style>
+/* Layout: a live 3D case on the left, the selected fan group's curve on the right, the motherboard headers underneath. */
+:root{
+  --bg:#f5f6f8; --surface:#ffffff; --line:#e3e6ec; --fg:#161a22; --muted:#6b7384;
+  --accent:#4a5fd6; --cool:#2f86e0; --warm:#e8792b; --ok:#2f9a62; --bad:#d9483b;
+  --glass:rgba(74,95,214,.06); --shadow:0 1px 2px rgba(20,25,40,.05),0 8px 24px rgba(20,25,40,.06);
+  --font-ui:"Inter",system-ui,-apple-system,"Segoe UI",sans-serif;
+  --font-mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  --scene-bg:#0b0e15;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#0f1218; --surface:#171b23; --line:#262c38; --fg:#e8ebf2; --muted:#8d95a7;
+  --accent:#7d8cff; --cool:#5fb0ff; --warm:#ff9a4a; --ok:#4cc38a; --bad:#ff6b5c;
+  --glass:rgba(125,140,255,.08); --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);
+  --scene-bg:#0b0e15; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1218; --surface:#171b23; --line:#262c38; --fg:#e8ebf2; --muted:#8d95a7;
+  --accent:#7d8cff; --cool:#5fb0ff; --warm:#ff9a4a; --ok:#4cc38a; --bad:#ff6b5c;
+  --glass:rgba(125,140,255,.08); --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);
+  --scene-bg:#0b0e15; color-scheme:dark}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html.embed body{padding-block:0;padding-inline:0;background:transparent}
+html.embed header.top{display:none}
+body{background:var(--bg);color:var(--fg);font-family:var(--font-ui);font-size:14px;line-height:1.5;padding-block:20px 40px;padding-inline:clamp(16px,3vw,32px)}
+.wrap{max-width:1320px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+header.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px}
+.eyebrow{font-family:var(--font-mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+h1{margin:4px 0 0;font-size:28px;letter-spacing:-.02em;text-wrap:balance}
+.sub{color:var(--muted);margin:2px 0 0;max-width:66ch}
+.mock{font-family:var(--font-mono);font-size:11px;padding:5px 10px;border-radius:999px;border:1px dashed var(--warm);color:var(--warm)}
+.grid{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:18px;align-items:start}
+@media (max-width:920px){.grid{grid-template-columns:1fr}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:18px;box-shadow:var(--shadow);min-width:0}
+.scene{position:relative;overflow:hidden}
+#view{display:block;width:100%;height:clamp(420px,70vh,720px);border-radius:18px;background:var(--scene-bg);touch-action:none;cursor:grab}
+.scene-ui{position:absolute;inset:12px 12px auto 12px;display:flex;flex-wrap:wrap;gap:8px;pointer-events:none}
+.scene-ui>*{pointer-events:auto}
+.seg{display:inline-flex;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:3px;gap:2px;box-shadow:var(--shadow)}
+.seg .seg-l{font-family:var(--font-mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);padding:0 6px 0 7px}
+.seg button{font:500 12px var(--font-ui);color:var(--muted);background:none;border:0;border-radius:7px;padding:6px 10px;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--glass);color:var(--accent)}
+.seg button:focus-visible,.chip:focus-visible,.btn:focus-visible,.hdr:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.swatches{display:inline-flex;gap:4px;padding:0 4px 0 6px;border-left:1px solid var(--line);margin-left:2px}
+.swatches button{width:18px;height:18px;padding:0;border-radius:50%;border:2px solid var(--surface);box-shadow:0 0 0 1px var(--line);cursor:pointer}
+.swatches button[aria-pressed="true"]{box-shadow:0 0 0 2px var(--accent)}
+.cpick{display:inline-flex;align-items:center;padding:0 4px;cursor:pointer}
+.cpick input{width:24px;height:22px;padding:0;border:0;background:none;cursor:pointer}
+.legend{position:absolute;left:12px;bottom:12px;display:flex;flex-wrap:wrap;gap:6px 14px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-size:12px;color:var(--muted);box-shadow:var(--shadow)}
+.legend button{font:inherit;color:inherit;background:none;border:0;padding:0;cursor:pointer}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+.legend .air{display:inline-flex;align-items:center;gap:6px}
+.legend .air span{display:inline-block;width:44px;height:8px;border-radius:4px;background:linear-gradient(90deg,var(--cool),var(--warm))}
+.tip{position:absolute;pointer-events:none;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 10px;box-shadow:var(--shadow);font-size:12px;transform:translate(-50%,-115%);white-space:nowrap}
+.tip b{display:block;font-size:13px}
+.tip span{font-family:var(--font-mono);color:var(--muted)}
+.labels{position:absolute;inset:0;pointer-events:none;overflow:hidden;border-radius:18px}
+.l3{position:absolute;left:0;top:0;pointer-events:auto;display:flex;align-items:center;gap:6px;font:500 11.5px var(--font-ui);background:var(--surface);color:var(--fg);border:1px solid var(--line);border-radius:999px;padding:4px 10px 4px 7px;box-shadow:var(--shadow);cursor:pointer;white-space:nowrap;will-change:transform;transition:border-color .15s,opacity .15s}
+.l3 .dot{width:8px;height:8px;border-radius:50%;flex:none}
+.l3 b{font-family:var(--font-mono);font-weight:500;color:var(--muted);font-size:11px}
+.l3[aria-pressed="true"]{border-color:var(--accent);box-shadow:0 0 0 3px var(--glass),var(--shadow)}
+.l3:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.side{padding:18px;display:flex;flex-direction:column;gap:16px}
+.gsw{display:flex;flex-wrap:wrap;gap:6px;padding-bottom:12px;border-bottom:1px solid var(--line)}
+.gsw button{display:inline-flex;align-items:center;gap:6px;font:500 12px var(--font-ui);border:1px solid var(--line);background:var(--surface);color:var(--muted);border-radius:8px;padding:5px 9px;cursor:pointer}
+.gsw button i{width:8px;height:8px;border-radius:50%}
+.gsw button[aria-selected="true"]{color:var(--fg);border-color:var(--fg)}
+.gsw button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.group-head{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.group-head h2{margin:2px 0 0;font-size:20px;letter-spacing:-.01em}
+.swatch{width:12px;height:12px;border-radius:4px;display:inline-block;margin-right:8px;vertical-align:0}
+.stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.stat{border:1px solid var(--line);border-radius:12px;padding:10px 12px;min-width:0}
+.stat .k{font-family:var(--font-mono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted)}
+.stat .v{font-size:22px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.stat .v small{font-size:12px;color:var(--muted);font-weight:500;margin-left:2px}
+.dbar{height:4px;border-radius:4px;background:var(--line);margin-top:6px;overflow:hidden}
+.dbar i{display:block;height:100%;border-radius:4px;background:var(--accent);transition:width .3s}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font:500 12px var(--font-ui);border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:999px;padding:5px 11px;cursor:pointer}
+.chip[aria-pressed="true"]{border-color:var(--accent);color:var(--accent);background:var(--glass)}
+.chip[disabled]{opacity:.45;cursor:not-allowed}
+.field{display:flex;flex-direction:column;gap:6px}
+.field label,.lbl{font-size:12px;color:var(--muted)}
+select{font:500 13px var(--font-ui);color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 10px}
+.curve{border:1px solid var(--line);border-radius:14px;padding:8px 8px 4px}
+.curve svg{display:block;width:100%;height:auto;touch-action:none}
+.curve .pt{cursor:grab}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center;justify-content:space-between}
+.btn{font:600 13px var(--font-ui);border-radius:10px;padding:9px 14px;border:1px solid var(--line);background:var(--surface);color:var(--fg);cursor:pointer}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn[disabled]{opacity:.55;cursor:not-allowed}
+.note{font-size:12px;color:var(--muted);border-left:3px solid var(--ok);padding:4px 0 4px 10px;margin:0}
+.note.warn{border-color:var(--warm)}
+.balance{border:1px solid var(--line);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:8px}
+.bal-row{display:grid;grid-template-columns:62px minmax(0,1fr) 76px;align-items:center;gap:10px;font-size:12px;color:var(--muted)}
+.bal-row b{font-family:var(--font-mono);font-weight:500;color:var(--fg);text-align:right;font-variant-numeric:tabular-nums}
+.bal{height:8px;border-radius:5px;background:var(--line);overflow:hidden}
+.bal i{display:block;height:100%;border-radius:5px;transition:width .3s}
+.tag{font-family:var(--font-mono);font-size:10.5px;border-radius:6px;padding:1px 6px;border:1px solid var(--line);color:var(--muted);white-space:nowrap}
+.tag.guess{border-color:var(--warm);color:var(--warm)}
+.tag.good{border-color:var(--ok);color:var(--ok)}
+.tag.bad{border-color:var(--bad);color:var(--bad)}
+.tag.off{opacity:.7}
+.headers{padding:16px 18px;display:flex;flex-direction:column;gap:12px}
+.headers h3{margin:0;font-size:15px}
+.hdr-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
+.hdr{border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:4px;background:var(--surface);text-align:left;cursor:pointer;color:var(--fg);font:inherit}
+.hdr[aria-pressed="true"]{border-color:var(--accent);background:var(--glass)}
+.hdr .name{font-family:var(--font-mono);font-size:12px}
+.hdr .rpm{font-size:18px;font-weight:600;font-variant-numeric:tabular-nums}
+.hdr .map{font-size:12px;color:var(--muted)}
+@media (max-width:560px){.legend{display:none}.l3{font-size:10.5px;padding:3px 8px 3px 6px}.seg button{padding:5px 8px}}
+@media (prefers-reduced-motion:reduce){.dbar i,.bal i{transition:none}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <div class="eyebrow">Homebase · prox · Thermaltake The Tower 500 · 388 × 398 × 608 mm</div>
+      <h1>Fan control</h1>
+      <p class="sub">Drag to orbit, scroll to zoom in close. Click a fan or a label to edit its group's curve. Fans spin at each header's measured RPM; the smoke is air, drawn in at the intakes, warming as it passes the GPU and radiator, and pushed out of the exhausts. Turn RGB on to dim the room.</p>
+    </div>
+    <span class="mock">Design mockup · readings from 2026-10-15 19:00 · nothing is applied</span>
+  </header>
+
+  <div class="grid">
+    <section class="panel scene" aria-label="3D case view">
+      <canvas id="view" aria-label="Rotatable 3D model of the case with fans and airflow"></canvas>
+      <div class="scene-ui">
+        <div class="seg" role="group" aria-label="Camera">
+          <button id="cam-iso" aria-pressed="true">3/4</button>
+          <button id="cam-front" aria-pressed="false">Front</button>
+          <button id="cam-right" aria-pressed="false">Radiator</button>
+          <button id="cam-back" aria-pressed="false">Back</button>
+          <button id="cam-gpu" aria-pressed="false">GPU</button>
+          <button id="cam-top" aria-pressed="false">Top</button>
+        </div>
+        <div class="seg" role="group" aria-label="Case panels">
+          <button id="pan-on" aria-pressed="true">Case</button>
+          <button id="pan-ghost" aria-pressed="false">X-ray</button>
+          <button id="pan-off" aria-pressed="false">Bare</button>
+        </div>
+        <div class="seg" role="group" aria-label="Airflow">
+          <span class="seg-l">Air</span>
+          <button id="air-smoke" aria-pressed="false">Smoke</button>
+          <button id="air-streaks" aria-pressed="false">Streaks</button>
+          <button id="air-both" aria-pressed="true">Both</button>
+          <button id="air-off" aria-pressed="false">Off</button>
+          <button id="tog-tint" aria-pressed="true" title="Color the air by temperature">Temp color</button>
+        </div>
+        <div class="seg" role="group" aria-label="Layers">
+          <button id="tog-heat" aria-pressed="true">Heat</button>
+          <button id="tog-lbl" aria-pressed="true">Labels</button>
+        </div>
+        <div class="seg" role="group" aria-label="RGB lighting">
+          <span class="seg-l">RGB</span>
+          <button id="rgb-off" aria-pressed="true">Off</button>
+          <button id="rgb-on" aria-pressed="false">On</button>
+          <span class="swatches" id="rgb-sw" role="group" aria-label="RGB color"></span>
+          <label class="cpick" title="Pick any color"><input type="color" id="rgb-color" value="#2f5bff" aria-label="Custom RGB color"></label>
+        </div>
+      </div>
+      <div class="labels" id="labels"></div>
+      <div class="legend" id="legend"></div>
+      <div class="tip" id="tip" hidden></div>
+    </section>
+
+    <aside class="panel side" aria-label="Selected fan group">
+      <div class="gsw" id="gsw" role="tablist" aria-label="Fan groups"></div>
+      <div class="group-head">
+        <div>
+          <div class="eyebrow" id="g-header">Header CPU_FAN</div>
+          <h2 id="g-name"><span class="swatch"></span>Radiator</h2>
+        </div>
+        <span class="tag" id="g-dir">Exhaust</span>
+      </div>
+      <div class="stats">
+        <div class="stat"><div class="k">Now</div><div class="v" id="s-rpm">0<small>rpm</small></div></div>
+        <div class="stat"><div class="k">Duty</div><div class="v" id="s-duty">0<small>%</small></div><div class="dbar" aria-hidden="true"><i id="s-dbar"></i></div></div>
+        <div class="stat"><div class="k" id="s-src-k">CPU Tctl</div><div class="v" id="s-temp">0<small>°C</small></div></div>
+      </div>
+      <div class="row" id="dir-row" hidden>
+        <span class="lbl">Rear fans blow <span class="tag guess">unconfirmed</span></span>
+        <div class="chips" role="group" aria-label="Rear fan direction"><button class="chip" id="dir-in" aria-pressed="true">Intake</button><button class="chip" id="dir-out" aria-pressed="false">Exhaust</button></div>
+      </div>
+      <div class="field">
+        <label for="src">Follows sensor</label>
+        <select id="src">
+          <option value="tctl">CPU package (Tctl)</option>
+          <option value="system">Board · System</option>
+          <option value="gpu">GPU core (RTX 3070)</option>
+          <option value="max">Hottest of CPU or GPU</option>
+        </select>
+      </div>
+      <div>
+        <div class="row" style="margin-bottom:6px"><span class="lbl">Curve · temperature → fan duty</span><div class="chips" role="group" aria-label="Presets"><button class="chip" data-preset="silent" aria-pressed="false">Silent</button><button class="chip" data-preset="bios" aria-pressed="true">Your BIOS</button><button class="chip" data-preset="cool" aria-pressed="false">Cold</button></div></div>
+        <div class="curve"><svg id="curve" viewBox="0 0 360 220" role="img" aria-label="Fan curve editor"></svg></div>
+      </div>
+      <div class="row">
+        <span class="lbl">Ramp down after 20 s · 3 °C hysteresis</span>
+        <button class="btn primary" id="apply" disabled title="Mockup only">Apply curve</button>
+      </div>
+      <div class="balance" aria-label="Airflow balance">
+        <div class="row"><span class="lbl">Airflow balance · estimated from RPM</span><span class="tag" id="press">Balanced</span></div>
+        <div class="bal-row"><span>Intake</span><div class="bal"><i id="bal-in" style="background:var(--cool)"></i></div><b id="cfm-in">0 CFM</b></div>
+        <div class="bal-row"><span>Exhaust</span><div class="bal"><i id="bal-out" style="background:var(--warm)"></i></div><b id="cfm-out">0 CFM</b></div>
+      </div>
+      <p class="note">If the controller stops or loses its sensor, every header falls back to the BIOS curve you set on 2026-10-11.</p>
+      <p class="note warn">Your safety rule is built in: no fan above 60% for long, never 100% for more than 10 s.</p>
+    </aside>
+  </div>
+
+  <section class="panel headers" aria-label="Motherboard fan headers">
+    <div class="row"><h3>Motherboard headers · MSI X870E Tomahawk (nct6687)</h3><span class="lbl">Mapping marked <span class="tag guess">guess</span> needs a one-time identify: pulse a header, watch which fans react, click them.</span></div>
+    <div class="hdr-grid" id="hdrs"></div>
+  </section>
+</div>
+
+<script src="/case/vendor/three.min.js"></script>
+<script src="/case/vendor/OrbitControls.js"></script>
+<script src="/case/vendor/CopyShader.js"></script>
+<script src="/case/vendor/LuminosityHighPassShader.js"></script>
+<script src="/case/vendor/EffectComposer.js"></script>
+<script src="/case/vendor/RenderPass.js"></script>
+<script src="/case/vendor/ShaderPass.js"></script>
+<script src="/case/vendor/UnrealBloomPass.js"></script>
+<script src="/case/case.js"></script>
+
+</body>
+</html>
