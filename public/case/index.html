@@ -146,7 +146,7 @@ html.embed #view{height:clamp(460px,calc(var(--host-vh,900px) * .74),900px);back
       <div>
         <div class="detail-head"><h2 id="g-name">Radiator</h2><span id="g-meta">38% · 61°C</span></div>
         <div class="chips" id="dir-row" role="group" aria-label="Rear fan direction" hidden><button class="chip" id="dir-in" aria-pressed="true">Intake</button><button class="chip" id="dir-out" aria-pressed="false">Exhaust</button></div>
-        <div class="chips" role="group" aria-label="Curve presets"><button class="chip" data-preset="silent" aria-pressed="false">Silent</button><button class="chip" data-preset="bios" aria-pressed="true">Your BIOS</button><button class="chip" data-preset="cool" aria-pressed="false">Cold</button><button class="chip" id="identify" hidden title="Spin this group to 60% for 4 s while every other group stops (never the pump), so you can see which fans it drives">Identify</button></div>
+        <div class="chips" role="group" aria-label="Curve presets"><button class="chip" data-preset="silent" aria-pressed="false">Silent</button><button class="chip" data-preset="bios" aria-pressed="true">Your BIOS</button><button class="chip" data-preset="cool" aria-pressed="false">Cold</button><button class="chip" id="identify" hidden title="Spin this group to 100% for 4 s while every other group stops (never the pump), so you can see which fans it drives">Identify</button></div>
         <div class="curve" title="Temperature → fan duty. Drag a point to shape the curve."><svg id="curve" viewBox="0 0 360 220" role="img" aria-label="Fan curve editor"></svg></div>
         <div class="apply" id="apply-state" role="status" hidden></div>
       </div>
