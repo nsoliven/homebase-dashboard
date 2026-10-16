@@ -45,7 +45,7 @@ renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
 const scene=new THREE.Scene();
 const cam=new THREE.PerspectiveCamera(34,1,0.3,60);   // the camera never gets closer than ~1.5 to a surface; a tiny near plane starves depth precision
 const controls=new THREE.OrbitControls(cam,canvas);
-controls.enableDamping=true;controls.target.set(0,3.0,0);controls.minDistance=3.5;controls.maxDistance=20;controls.enablePan=false;controls.autoRotateSpeed=0.55;
+controls.enableDamping=true;controls.maxPolarAngle=Math.PI*0.53;controls.target.set(0,3.0,0);controls.minDistance=3.5;controls.maxDistance=20;controls.enablePan=false;controls.autoRotateSpeed=0.55;
 /* The stage stays passive until it is pressed, so scrolling the page past it never zooms the case.
    Pressing it (drag or click) takes control; leaving it hands scroll back. Idle for a few seconds, it spins. */
 let stageActive=false,lastInput=-1e9;
@@ -57,6 +57,24 @@ canvas.addEventListener('wheel',()=>{if(stageActive)touched()},{passive:true});
 canvas.addEventListener('pointerleave',e=>{if(!e.buttons)setStage(false)});
 addEventListener('blur',()=>setStage(false));
 setStage(false);
+/* WASD to fly, Space up, Shift down: after you click the stage, until you click elsewhere or leave the window.
+   Camera and orbit point move together, so dragging still orbits where you have flown to. */
+const keys=new Set();let keysOn=false;
+canvas.addEventListener('pointerdown',()=>{keysOn=true},{capture:true});
+document.addEventListener('pointerdown',e=>{if(e.target!==canvas){keysOn=false;keys.clear()}});
+addEventListener('blur',()=>{keysOn=false;keys.clear()});
+addEventListener('keydown',e=>{if(!keysOn||e.target.closest?.('input,select,textarea'))return;const k=e.key===' '?'space':e.key.toLowerCase();if(!['w','a','s','d','space','shift'].includes(k))return;keys.add(k);touched();e.preventDefault()});
+addEventListener('keyup',e=>keys.delete(e.key===' '?'space':e.key.toLowerCase()));
+const _f=new THREE.Vector3(),_r=new THREE.Vector3(),_m=new THREE.Vector3();
+function fly(dt){
+  if(!keys.size)return;touched();
+  cam.getWorldDirection(_f);_r.crossVectors(_f,cam.up).normalize();
+  const k=n=>keys.has(n)?1:0;
+  _m.set(0,0,0).addScaledVector(_f,k('w')-k('s')).addScaledVector(_r,k('d')-k('a'));_m.y+=k('space')-k('shift');
+  if(!_m.lengthSq())return;_m.normalize().multiplyScalar(3.4*dt);
+  cam.position.add(_m);controls.target.add(_m);
+  const lift=Math.max(0,0.25-cam.position.y);if(lift){cam.position.y+=lift;controls.target.y+=lift}   // never through the desk
+}
 
 function makeEnv(stops,boxes){
   const c=document.createElement('canvas');c.width=8;c.height=256;const g=c.getContext('2d');const gr=g.createLinearGradient(0,0,0,256);stops.forEach(([o,col])=>gr.addColorStop(o,col));g.fillStyle=gr;g.fillRect(0,0,8,256);
@@ -183,8 +201,15 @@ let ioRing,floorShadow;
   ioRing=new THREE.Mesh(new THREE.TorusGeometry(0.075,0.015,10,36),std({color:0xe6e9f2,emissive:0x2f5bff,emissiveIntensity:.15}));ioRing.position.z=0.012;io.add(ioRing);
   [[1,1],[1,-1],[-1,1],[-1,-1]].forEach(([a,b])=>bar(0.36,0.14,0.36,a*(W/2-0.38),-0.07,b*(D/2-0.38)));
   const sc=document.createElement('canvas');sc.width=sc.height=128;const g2=sc.getContext('2d');const gr=g2.createRadialGradient(64,64,8,64,64,64);gr.addColorStop(0,'rgba(0,0,0,.32)');gr.addColorStop(1,'rgba(0,0,0,0)');g2.fillStyle=gr;g2.fillRect(0,0,128,128);
+  // a dark gray wood desk under the feet, like the real one
+  const wood=canvasTex(512,512,(g,w,h)=>{g.fillStyle='#3d3f43';g.fillRect(0,0,w,h);
+    for(let i=0;i<180;i++){const y=rnd()*h,a=0.03+rnd()*0.09,l=rnd()<0.5?'255,255,255':'0,0,0';g.strokeStyle=`rgba(${l},${a})`;g.lineWidth=0.6+rnd()*1.8;g.beginPath();g.moveTo(0,y);
+      for(let x=0;x<=w;x+=32)g.lineTo(x,y+Math.sin(x/90+i)*3*rnd());g.stroke()}
+    for(let i=0;i<5;i++){const x=rnd()*w,y=rnd()*h;const r=g.createRadialGradient(x,y,1,x,y,18+rnd()*20);r.addColorStop(0,'rgba(0,0,0,.18)');r.addColorStop(1,'rgba(0,0,0,0)');g.fillStyle=r;g.fillRect(x-40,y-40,80,80)}},[2.5,1.6]);
+  const table=new THREE.Mesh(new THREE.BoxGeometry(14,0.4,9),std({map:wood,color:0x7d8087,roughness:.82,metalness:.02}));table.position.set(0,-0.145-0.2,1.2);scene.add(table);
   floorShadow=new THREE.Mesh(new THREE.PlaneGeometry(W*2,D*2),new THREE.MeshBasicMaterial({map:new THREE.CanvasTexture(sc),transparent:true,depthWrite:false}));floorShadow.rotation.x=-Math.PI/2;floorShadow.position.y=-0.139;scene.add(floorShadow);
   panel(W-0.16,D-0.16,'slot',{y:BASE,rx:-Math.PI/2,keep:true});
+  panel(W,D,'solid',{y:0.002,rx:Math.PI/2,keep:true});   // the solid white underside of the case
   // the Thermaltake mark on the floor cover, just behind the front glass
   label(textTex('TT  thermaltake',{w:1024,h:160,color:'#23262d',font:'700 84px Inter, system-ui, sans-serif',spacing:'4px'}),0.9,0.14,0,BASE+0.11,D/2-0.12,caseGroup).userData.keep=true;
   const shroud=box(W-0.16,0.2,0.04,MAT.white,0,BASE+0.1,D/2-0.1,caseGroup);shroud.userData.keep=true;
@@ -302,8 +327,8 @@ let pumpRingMat,pumpInfMat;
 });
 /* Thermaltake Toughpower GF3 850W in the base, at the back */
 {
-  box(1.5,0.86,1.6,std({color:0x16171a,roughness:.45,metalness:.4}),-0.85,0.45,-1.05);
-  const grille=new THREE.Mesh(new THREE.TorusGeometry(0.52,0.02,8,64),MAT.gun);grille.rotation.x=Math.PI/2;grille.position.set(-0.85,0.885,-1.05);scene.add(grille);
+  box(1.5,0.76,1.6,std({color:0x16171a,roughness:.45,metalness:.4}),-0.85,0.42,-1.05);   // sits inside the basement, clear of the floor panel at 0.85
+  const grille=new THREE.Mesh(new THREE.TorusGeometry(0.52,0.02,8,64),MAT.gun);grille.rotation.x=Math.PI/2;grille.position.set(-0.85,0.805,-1.05);scene.add(grille);
   label(textTex('TOUGHPOWER  GF3',{color:'#c9cdd6',font:'700 64px Inter, system-ui, sans-serif',spacing:'6px'}),0.9,0.1,-0.85,0.45,-0.245);
 }
 
@@ -395,7 +420,7 @@ const OBST=[
   {id:'pump',b:[PUMP.x-0.4,PUMP.x+0.62,PUMP.y-0.4,PUMP.y+0.4,BZ,BZ+0.68]},
   {id:'ram',b:[-0.24,1.14,PUMP.y-0.95,PUMP.y-0.62,BZ,BZ+0.64]},
   {id:'vrm',b:[PUMP.x-0.64,PUMP.x+0.78,PUMP.y-0.6,PUMP.y+0.78,BZ,BZ+0.36]},
-  {id:'psu',b:[-1.62,-0.08,0,0.9,-1.87,-0.23]},
+  {id:'psu',b:[-1.62,-0.08,0,0.82,-1.87,-0.23]},
   {id:'rad',b:[RAD.x-0.15,RAD.x+0.15,RAD.y-1.99,RAD.y+1.99,RAD.z-0.6,RAD.z+0.6]},
 ];
 function pushOut(F,k,skipRad){
@@ -713,6 +738,7 @@ canvas.addEventListener('pointerup',e=>{if(down&&Math.hypot(e.clientX-down[0],e.
 let last=performance.now();
 function frame(now){
   const dt=Math.min(0.05,(now-last)/1000);last=now;const t=now/1000;
+  fly(dt);
   if(!directShot(now))controls.update();
   const selGlow=selT<0?0:t-selT<1.2?1:0.55;   // nothing ringed until you pick a group; then a bright flash that settles to a steady ring
   fans.forEach(f=>{
