@@ -23,10 +23,23 @@ stopping = False
 
 
 def run(args, timeout=12, input_data=None):
-    result = subprocess.run(args, input=input_data, text=True, capture_output=True, timeout=timeout)
-    if result.returncode:
+    """Run one probe. A probe that outlives its timeout is killed and abandoned, never waited on.
+
+    subprocess.run() waits for the killed child after a timeout. A child stuck in uninterruptible
+    sleep (on Synapse: a guest page fault the hypervisor never answered) or one that left a
+    grandchild holding its pipes open makes that wait endless, and with it the whole collector.
+    """
+    process = subprocess.Popen(args, stdin=subprocess.PIPE if input_data is not None else subprocess.DEVNULL,
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    try:
+        stdout, _ = process.communicate(input_data, timeout=timeout)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        threading.Thread(target=process.wait, daemon=True).start()   # reap it whenever it finally exits
+        raise RuntimeError('Probe timed out') from None
+    if process.returncode:
         raise RuntimeError('Probe failed')
-    return result.stdout
+    return stdout
 
 
 def ssh(host, command, input_data=None):
