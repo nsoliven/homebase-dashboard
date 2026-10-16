@@ -779,7 +779,7 @@ balance();select('rad',true);
 /* ---------- live fan control (Homebase backend → prox) ----------
    Same-origin calls with the dashboard session. If there's no session or no fan service
    (for example on the public demo), everything stays modeled. Curve edits apply on Save; Hold pins a speed for a time. */
-const live={on:false,csrf:null,mode:null,timer:0,dirty:new Set(),saved:{},holds:{},holdsAt:0,holdsServer:0,holdTotal:{}};
+const live={headers:{},direct:{},reqMode:null,on:false,csrf:null,mode:null,timer:0,dirty:new Set(),saved:{},holds:{},holdsAt:0,holdsServer:0,holdTotal:{}};
 const ctlEl=document.getElementById('ctl'),applyEl=document.getElementById('apply-state'),identifyEl=document.getElementById('identify'),noteEl=document.getElementById('live-note');
 const CONTROLLED=['rad','top','floor','rear'];
 const say=(text,tone='')=>{applyEl.hidden=!text;applyEl.textContent=text;applyEl.className='apply '+tone};
@@ -796,11 +796,11 @@ function applyStatus(st){
   if(st.temps?.system!=null)['top','floor','rear'].forEach(g=>GROUPS[g].temp=Math.round(st.temps.system));
   for(const g of CONTROLLED)if(st.curves?.[g]){live.saved[g]=st.curves[g].map(p=>[...p]);if(!live.dirty.has(g)&&!(drag!==null&&g===sel))GROUPS[g].curve=st.curves[g].map(p=>[...p])}
   live.mode=st.mode;
-  document.getElementById('mode-curves').setAttribute('aria-pressed',st.requestedMode==='curves');
-  document.getElementById('mode-bios').setAttribute('aria-pressed',st.requestedMode!=='curves');
+  for(const m of ['curves','direct','bios'])document.getElementById('mode-'+m).setAttribute('aria-pressed',st.requestedMode===m||(m==='bios'&&!['curves','direct'].includes(st.requestedMode)));
+  live.direct=st.direct||{};live.headers=st.headers||{};live.reqMode=st.requestedMode;renderDirect();
   groupEls.forEach(b=>{const g=GROUPS[b.dataset.g],tick=b.querySelector('.duty em');b.querySelector('.rpm').textContent=g.readonly?'auto':g.noTach?'no RPM':rpmOf(b.dataset.g).toLocaleString();b.querySelector('.duty b').style.width=(g.actual??g.duty)+'%';tick.hidden=g.readonly||g.fixed||g.actual==null;tick.style.left=g.duty+'%'});   // bar = actual speed, tick = target
   labelEls.forEach(b=>{const k=b.dataset.g;b.querySelector('b').textContent=GROUPS[k].readonly?'auto':rpmOf(k).toLocaleString()+' rpm'});
-  const msg=st.error?`BIOS in charge · ${st.error}`:st.mode==='curves'?'Live from prox · your curves are running':'Live from prox · BIOS curves in charge';
+  const msg=st.error?`BIOS in charge · ${st.error}`:st.mode==='curves'?'Live from prox · your curves are running':st.mode==='direct'?'Live from prox · direct control':'Live from prox · BIOS curves in charge';
   noteEl.textContent=msg;parent!==window&&parent.postMessage({type:'homebase-case-live',live:true,mode:st.mode,error:st.error||null},location.origin);
   buildFlow();balance();select(sel,true);
 }
@@ -851,6 +851,33 @@ async function setMode(mode){
 }
 document.getElementById('mode-curves').onclick=()=>setMode('curves');
 document.getElementById('mode-bios').onclick=()=>setMode('bios');
+/* Direct mode: one slider per header (never the pump); letting go applies it at once */
+const HEADER_NAMES={1:['CPU Fan 1','Radiator'],3:['System Fan 1','empty'],4:['System Fan 2','Rear'],5:['System Fan 3','Rear'],6:['System Fan 4','Top'],7:['System Fan 5','Bottom intake'],8:['System Fan 6','empty']};
+const directList=document.getElementById('direct-list'),directState=document.getElementById('direct-state');
+directList.innerHTML=Object.entries(HEADER_NAMES).map(([ch,[n,role]])=>`<div class="dir-row" data-ch="${ch}"><span class="dn">${n}<small>${role}</small></span><span class="dv">–</span><input type="range" min="0" max="100" step="5" value="40" aria-label="${n} speed"><span class="dr">–</span></div>`).join('');
+const dirRows=[...directList.querySelectorAll('.dir-row')];
+let dirDragging=null;
+function renderDirect(){
+  const on=live.on&&live.reqMode==='direct';
+  document.getElementById('direct-ui').hidden=!on;document.getElementById('fans-ui').hidden=on;document.getElementById('detail-ui').hidden=on;
+  if(!on)return;
+  dirRows.forEach(r=>{const ch=r.dataset.ch,h=live.headers[ch]||{},set=live.direct[ch],input=r.querySelector('input');
+    if(dirDragging!==ch)input.value=set??h.duty??0;
+    r.classList.toggle('bios',set==null);
+    r.querySelector('.dv').textContent=dirDragging===ch?input.value+'%':set!=null?set+'%':'BIOS';
+    r.querySelector('.dr').textContent=h.rpm?`${h.rpm.toLocaleString()} rpm · actual ${h.duty}%`:`no rpm · actual ${h.duty??'–'}%`});
+}
+dirRows.forEach(r=>{const input=r.querySelector('input'),ch=r.dataset.ch;
+  input.addEventListener('input',()=>{dirDragging=ch;r.querySelector('.dv').textContent=input.value+'%'});
+  input.addEventListener('change',async()=>{dirDragging=null;const v=+input.value;directState.hidden=false;directState.className='apply';directState.textContent=`Setting ${HEADER_NAMES[ch][0]} to ${v}%…`;
+    try{applyStatus(await api('POST',{direct:{[ch]:v}}));directState.className='apply ok';directState.textContent=`${HEADER_NAMES[ch][0]} → ${v}%`}
+    catch(e){directState.className='apply bad';directState.textContent=`Not set · ${e.message}`}});
+});
+document.getElementById('direct-reset').onclick=async()=>{try{applyStatus(await api('POST',{direct:Object.fromEntries(Object.keys(HEADER_NAMES).map(ch=>[ch,null]))}));directState.hidden=false;directState.className='apply ok';directState.textContent='Every header back on its BIOS curve'}catch(e){directState.hidden=false;directState.className='apply bad';directState.textContent=`Not reset · ${e.message}`}};
+// entering Direct starts every slider at the speed it is running now, so nothing jumps
+document.getElementById('mode-direct').onclick=async()=>{if(!live.on)return;say('Switching to direct control…');
+  try{const seed=Object.fromEntries(Object.keys(HEADER_NAMES).map(ch=>[ch,live.direct[ch]??live.headers[ch]?.duty??40]));applyStatus(await api('POST',{direct:seed}));say('Direct control · drag a slider and let go','ok')}
+  catch(e){say(`Not changed · ${e.message}`,'bad')}};
 const IDENTIFY_S=4;   // matches the fan service's pulse
 identifyEl.onclick=async()=>{
   if(!live.on||!CONTROLLED.includes(sel)||identifyEl.classList.contains('running'))return;

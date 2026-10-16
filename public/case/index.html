@@ -88,6 +88,13 @@ html.embed #view{height:clamp(460px,calc(var(--host-vh,900px) * .74),900px);back
 .hold-opt{display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);cursor:pointer}
 .hold-opt input{accent-color:var(--accent)}
 .hold-bar{display:block;height:3px;border-radius:2px;background:var(--accent);margin-top:-6px;transition:width .25s linear}
+.dir-row{display:grid;grid-template-columns:minmax(0,1fr) 44px;gap:2px 10px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
+.dir-row .dn{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dir-row .dn small{color:var(--muted);font-weight:400;margin-left:6px}
+.dir-row .dv{font-family:var(--font-mono);font-size:13px;text-align:right;font-variant-numeric:tabular-nums}
+.dir-row input{grid-column:1/3;width:100%;accent-color:var(--accent)}
+.dir-row .dr{grid-column:1/3;font-family:var(--font-mono);font-size:11px;color:var(--muted)}
+.dir-row.bios .dv{color:var(--muted)}
 .apply{font-size:12px;color:var(--muted);margin-top:6px}
 .apply.ok{color:var(--ok)}
 .apply.bad{color:var(--bad)}
@@ -154,12 +161,12 @@ html.embed #view{height:clamp(460px,calc(var(--host-vh,900px) * .74),900px);back
     </section>
 
     <aside class="side" aria-label="Fans">
-      <div class="ctl" id="ctl" hidden><span class="sec-h" style="margin:0">Control</span><div class="seg" role="group" aria-label="Who drives the fans"><button id="mode-curves" aria-pressed="false" title="Homebase runs the curves below">Your curves</button><button id="mode-bios" aria-pressed="true" title="Hand every fan back to the BIOS curve">BIOS</button></div></div>
-      <div>
+      <div class="ctl" id="ctl" hidden><span class="sec-h" style="margin:0">Control</span><div class="seg" role="group" aria-label="Who drives the fans"><button id="mode-curves" aria-pressed="false" title="Each group follows its curve">Curves</button><button id="mode-direct" aria-pressed="false" title="Set each fan header with a slider">Direct</button><button id="mode-bios" aria-pressed="true" title="Hand every fan back to the BIOS curve">BIOS</button></div></div>
+      <div id="fans-ui">
         <div class="sec-h"><span>Fans</span><span>rpm</span></div>
         <div class="groups" id="groups" role="listbox" aria-label="Fan groups"></div>
       </div>
-      <div>
+      <div id="detail-ui">
         <div class="detail-head"><h2 id="g-name">Radiator</h2><span id="g-meta">38% · 61°C</span></div>
         <div class="chips" id="dir-row" role="group" aria-label="Rear fan direction" hidden><button class="chip" id="dir-in" aria-pressed="true">Intake</button><button class="chip" id="dir-out" aria-pressed="false">Exhaust</button></div>
         <div class="chips" role="group" aria-label="Curve presets"><button class="chip" data-preset="silent" aria-pressed="false">Silent</button><button class="chip" data-preset="bios" aria-pressed="true">Your BIOS</button><button class="chip" data-preset="cool" aria-pressed="false">Cold</button><button class="chip" id="identify" hidden title="Spin this group to 100% for 4 s while every other group stops (never the pump), so you can see which fans it drives">Identify</button></div>
@@ -173,6 +180,11 @@ html.embed #view{height:clamp(460px,calc(var(--host-vh,900px) * .74),900px);back
           <button class="btn hold-btn" id="hold-btn">Hold 50%</button><i class="hold-bar" id="hold-bar" hidden></i>
           <label class="hold-opt"><input type="checkbox" id="hold-others" checked> Other fans off while holding</label>
         </div>
+      </div>
+      <div id="direct-ui" hidden>
+        <div class="sec-h"><span>Direct · per header</span><button class="chip" id="direct-reset" title="Put every header back on its BIOS curve until you set it">Reset</button></div>
+        <div id="direct-list"></div>
+        <div class="apply" id="direct-state" role="status" hidden></div>
       </div>
       <div title="Estimated from fan RPM and size; radiators restrict about 35%. More intake than exhaust keeps dust out.">
         <div class="sec-h"><span>Airflow</span><span class="tag" id="press">Balanced</span></div>
