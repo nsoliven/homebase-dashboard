@@ -9,11 +9,11 @@ test('fan changes are validated before they leave the dashboard', () => {
   assert.deepEqual(validFanRequest({ group: 'rad', curve: [[50, 20.4], [80, 45], [95, 60]] }), { group: 'rad', curve: [[50, 20], [80, 45], [95, 60]] });
   assert.deepEqual(validFanRequest({ mode: 'bios' }), { mode: 'bios' });
   assert.deepEqual(validFanRequest({ pulse: 'top' }), { pulse: 'top' });
-  assert.deepEqual(validFanRequest({ hold: 'top', duty: 25, seconds: 60 }), { hold: 'top', duty: 25, seconds: 60 });
-  assert.deepEqual(validFanRequest({ hold: 'rad', duty: 0, seconds: null }), { hold: 'rad', duty: 0, seconds: null });
-  assert.deepEqual(validFanRequest({ hold: 'floor', duty: 100, seconds: 10 }), { hold: 'floor', duty: 100, seconds: 10 });
+  assert.deepEqual(validFanRequest({ hold: 'top', duty: 25, seconds: 60 }), { hold: 'top', duty: 25, seconds: 60, othersOff: true });
+  assert.deepEqual(validFanRequest({ hold: 'rad', duty: 0, seconds: null, othersOff: false }), { hold: 'rad', duty: 0, seconds: null, othersOff: false });
+  assert.deepEqual(validFanRequest({ hold: 'floor', duty: 100, seconds: 900 }), { hold: 'floor', duty: 100, seconds: 900, othersOff: true });
   assert.deepEqual(validFanRequest({ release: 'rear' }), { release: 'rear' });
-  for (const bad of [{ hold: 'top', duty: 80, seconds: 60 }, { hold: 'top', duty: 80, seconds: null }, { hold: 'pump', duty: 50, seconds: 10 }, { hold: 'top', duty: 120, seconds: 10 }, { hold: 'top', duty: 50, seconds: 0 }, { hold: 'top', duty: 50 }, { release: 'pump' }])
+  for (const bad of [{ hold: 'top', duty: 80, seconds: 60, othersOff: 'yes' }, { hold: 'pump', duty: 50, seconds: 10 }, { hold: 'top', duty: 120, seconds: 10 }, { hold: 'top', duty: 50, seconds: 0 }, { hold: 'top', duty: 50 }, { release: 'pump' }])
     assert.equal(validFanRequest(bad), null, JSON.stringify(bad));
   for (const bad of [null, [], { group: 'pump', curve: [[30, 100], [60, 100]] }, { group: 'gpu', curve: [[30, 0], [60, 50]] }, { group: 'rad', curve: [[50, 20]] },
     { group: 'rad', curve: [[80, 20], [50, 40]] }, { group: 'rad', curve: [[10, 20], [50, 40]] }, { group: 'rad', curve: [[50, 20], [60, 140]] }, { group: 'rad', curve: [[50, '20'], [60, 30]] },

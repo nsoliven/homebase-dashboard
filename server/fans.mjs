@@ -14,8 +14,9 @@ export function validFanRequest(body) {
     const { hold, duty, seconds } = body, num = v => typeof v === 'number' && Number.isFinite(v);
     if (!FAN_GROUPS.includes(hold) || !num(duty) || duty < 0 || duty > 100) return null;
     if (seconds !== null && (!num(seconds) || seconds < 1 || seconds > 86400)) return null;
-    if (duty > 60 && (seconds === null || seconds > 10)) return null;   // the noise rule: above 60% for 10 s at most
-    return { hold, duty: Math.round(duty), seconds: seconds === null ? null : Math.round(seconds) };
+    const othersOff = body.othersOff ?? true;
+    if (typeof othersOff !== 'boolean') return null;
+    return { hold, duty: Math.round(duty), seconds: seconds === null ? null : Math.round(seconds), othersOff };
   }
   const { group, curve } = body;
   if (!FAN_GROUPS.includes(group) || !Array.isArray(curve) || curve.length < 2 || curve.length > 8) return null;

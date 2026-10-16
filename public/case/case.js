@@ -742,7 +742,6 @@ function drawCurve(){
   let s=`<rect x="${X0}" y="${Y1}" width="${X1-X0}" height="${Y0-Y1}" fill="var(--glass)" rx="6"></rect>`;
   for(let t=30;t<=100;t+=10)s+=`<line x1="${sx(t)}" x2="${sx(t)}" y1="${Y1}" y2="${Y0}" stroke="var(--line)" stroke-width="1"></line><text x="${sx(t)}" y="${Y0+16}" fill="var(--muted)" font-size="10" text-anchor="middle" font-family="JetBrains Mono, monospace">${t}°</text>`;
   for(let d=0;d<=100;d+=25)s+=`<line x1="${X0}" x2="${X1}" y1="${sy(d)}" y2="${sy(d)}" stroke="var(--line)" stroke-width="1"></line><text x="${X0-6}" y="${sy(d)+3}" fill="var(--muted)" font-size="10" text-anchor="end" font-family="JetBrains Mono, monospace">${d}%</text>`;
-  s+=`<rect x="${X0}" y="${Y1}" width="${X1-X0}" height="${sy(60)-Y1}" fill="var(--warm)" opacity=".07"></rect><text x="${X0+4}" y="${sy(60)-4}" fill="var(--warm)" font-size="10" text-anchor="start" font-family="JetBrains Mono, monospace">above 60%: short bursts only</text>`;
   const poly=[[TMIN,pts[0][1]],...pts,[TMAX,pts[pts.length-1][1]]];
   s+=`<path d="M${poly.map(p=>sx(p[0])+','+sy(p[1])).join(' L')} L${X1},${Y0} L${X0},${Y0} Z" fill="${g.color}" opacity=".12"></path>`;
   s+=`<polyline points="${poly.map(p=>sx(p[0])+','+sy(p[1])).join(' ')}" fill="none" stroke="${g.color}" stroke-width="2.5" stroke-linejoin="round"></polyline>`;
@@ -820,8 +819,8 @@ async function saveCurve(){
 }
 function revertCurve(){const g=sel;if(live.saved[g])GROUPS[g].curve=live.saved[g].map(p=>[...p]);live.dirty.delete(g);document.querySelectorAll('[data-preset]').forEach(b=>b.setAttribute('aria-pressed','false'));say('');drawCurve();renderControls()}
 document.getElementById('save').onclick=saveCurve;document.getElementById('revert').onclick=revertCurve;
-/* hold: pin the selected group at a speed for a time; above 60% only 10 s (the noise rule, also enforced on prox) */
-const holdDuty=document.getElementById('hold-duty'),holdVal=document.getElementById('hold-val'),holdBtn=document.getElementById('hold-btn'),holdHint=document.getElementById('hold-hint'),holdBar=document.getElementById('hold-bar');
+/* hold: pin the selected group at a speed for a time; with "Other fans off" every other group stops meanwhile */
+const holdDuty=document.getElementById('hold-duty'),holdVal=document.getElementById('hold-val'),holdBtn=document.getElementById('hold-btn'),holdBar=document.getElementById('hold-bar');
 let holdSecs=60;
 const timeChips=[...document.querySelectorAll('#hold-times .chip')];
 timeChips.forEach(c=>c.onclick=()=>{holdSecs=c.dataset.s==='hold'?null:+c.dataset.s;renderControls()});
@@ -832,10 +831,8 @@ renderControls=()=>{
   const g=GROUPS[sel],ctl=live.on&&CONTROLLED.includes(sel);
   document.getElementById('savebar').hidden=!(ctl&&live.dirty.has(sel));
   document.getElementById('hold-box').hidden=!ctl;if(!ctl)return;
-  const d=+holdDuty.value,loud=d>60;holdVal.textContent=d+'%';
-  if(loud&&(holdSecs==null||holdSecs>10))holdSecs=10;
-  timeChips.forEach(c=>{const s=c.dataset.s==='hold'?null:+c.dataset.s;c.disabled=loud&&(s==null||s>10);c.setAttribute('aria-pressed',s===holdSecs)});
-  holdHint.textContent=loud?'Above 60%: 10 s max (your noise rule)':'';
+  const d=+holdDuty.value;holdVal.textContent=d+'%';
+  timeChips.forEach(c=>{const s=c.dataset.s==='hold'?null:+c.dataset.s;c.setAttribute('aria-pressed',s===holdSecs)});
   const left=remaining(sel);
   if(left!=null&&left>0){const h=live.holds[sel];holdBtn.classList.add('running');holdBtn.textContent=left===Infinity?`Holding ${h.duty}% · Release`:`Holding ${h.duty}% · ${clock(left)} · Release`;
     const tot=live.holdTotal[sel];holdBar.hidden=left===Infinity||!tot;if(tot)holdBar.style.width=Math.max(0,Math.min(100,left/tot*100))+'%'}
@@ -846,7 +843,7 @@ holdBtn.onclick=async()=>{
   try{
     if(left!=null&&left>0){say('Releasing…');applyStatus(await api('POST',{release:g}));say(`${GROUPS[g].name} back on its curve`,'ok');return}
     const duty=+holdDuty.value;say(`Holding ${GROUPS[g].name} at ${duty}%…`);
-    const st=await api('POST',{hold:g,duty,seconds:holdSecs});live.holdTotal[g]=holdSecs;applyStatus(st);say(`${GROUPS[g].name} held at ${duty}%${holdSecs?` for ${clock(holdSecs)}`:' until you release it'}`,'ok');
+    const othersOff=document.getElementById('hold-others').checked;const st=await api('POST',{hold:g,duty,seconds:holdSecs,othersOff});live.holdTotal[g]=holdSecs;applyStatus(st);say(`${GROUPS[g].name} held at ${duty}%${holdSecs?` for ${clock(holdSecs)}`:' until you release it'}${othersOff?' · other fans off':''}`,'ok');
   }catch(e){say(`Not changed · ${e.message}`,'bad')}
 };
 setInterval(()=>{if(live.on&&Object.keys(live.holds).length)renderControls()},250);
