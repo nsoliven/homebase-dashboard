@@ -10,6 +10,7 @@ import { setScenario } from './demo-compute.mjs';
 import { Store } from '../server/store.mjs';
 import { METRIC_ID, RANGES, metricHistory, metricSpec } from '../server/metrics.mjs';
 import { GROUP_ID, groupDetail } from '../server/compute-groups.mjs';
+import { demoProxy } from './demo-proxy.mjs';
 
 // In-memory only; synthetic samples through the production metric tiers.
 const metricStore = new Store(':memory:');
@@ -65,10 +66,7 @@ const applications = [
   ['photos','Photo library','Applications','Browse your collection'],
   ['monitoring','Monitoring','Applications','Signals across the lab'],
 ].map(([id,name,category,description])=>({id,name,category,description,iconUrl:`/api/apps/${id}/icon`}));
-const integrations = {applications,branding:{nas:'/api/branding/nas/icon',proxmox:'/api/branding/proxmox/icon',router:'/api/branding/router/icon'},proxy:{status:'connected',observedAt:now,accounts:[
-  {id:'sample-a',name:'Personal account',status:'DRAINING',observedAt:now,source:'header',windows:windows(3,1)},
-  {id:'sample-b',name:'Work account',status:'NEXT',observedAt:now-55*60_000,source:'usage',windows:windows(7,2)},
-]}};
+const integrations = {applications,branding:{nas:'/api/branding/nas/icon',proxmox:'/api/branding/proxmox/icon',router:'/api/branding/router/icon'},proxy:demoProxy(now)};
 const snapshot = {
   observedAt:now,host,vms,agents,alerts:[],nas:null,
   quotas:{codex:{observedAt:now,windows:windows(18,26)},claude:null},
@@ -123,7 +121,7 @@ http.createServer(async(req,res)=>{
     if(!cap?.available){res.writeHead(409,{'Content-Type':'application/json'});res.end(JSON.stringify({source:id,status:'unavailable',reason:cap?.reason||'Unknown source.',snapshot:demoSnapshot()}));return;}
     await new Promise(r=>setTimeout(r,Number(process.env.DEMO_REFRESH_MS||2200)));
     const at=Date.now();
-    if(id==='proxy')for(const a of integrations.proxy.accounts)a.observedAt=at;
+    if(id==='proxy')integrations.proxy=demoProxy(at);
     else{const s=snapshot.sources.find(s=>s.id===id||id.startsWith('guest:')&&s.id==='host');if(s)s.observedAt=at;if(id==='proxmox')snapshot.observedAt=at;}
     lastRefresh[id]=at;
     res.writeHead(200,{'Content-Type':'application/json'});res.end(JSON.stringify({source:id,status:'updated',observedAt:at,snapshot:demoSnapshot(),...(id==='proxy'?{integrations}:{}),...(id==='compute'?{live:demoCompute.live()}:{})}));return;

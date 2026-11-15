@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {proxyReport} from '../server/integrations.mjs';
+import {proxyReport} from '../server/proxy.mjs';
 import {quotaReading,quotaSummary,QUOTA_FRESH_MS} from '../server/quota.mjs';
 
 const now=Date.parse('2026-10-14T20:00:00Z');

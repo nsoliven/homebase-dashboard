@@ -21,6 +21,13 @@ export function RefreshProvider({ session, capabilities, apply, expire, children
   return <RefreshContext.Provider value={{ capabilities: capabilities || {}, state, run }}>{children}</RefreshContext.Provider>;
 }
 
+/** Opening a page asks its sources for a fresh reading once per visit; the server throttles repeats. */
+export function useRefreshOnOpen(sources) {
+  const { capabilities, run } = useContext(RefreshContext);
+  const ready = sources.filter(id => capabilities[id]?.available).join(',');
+  useEffect(() => { if (ready) run(ready.split(',')); }, [ready]);
+}
+
 function summary(results) {
   if (!results.length) return null;
   const by = status => results.filter(r => r.status === status);

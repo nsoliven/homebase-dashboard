@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Store } from '../server/store.mjs';
 import { summarize } from '../server/statistics.mjs';
-import { proxyReport,safeApplications } from '../server/integrations.mjs';
+import { safeApplications } from '../server/integrations.mjs';
+import { proxyReport } from '../server/proxy.mjs';
 import { chartValues,sanitizeFeed } from '../server/model.mjs';
 
 test('summaries retain true peaks and nearest-rank P99 before chart downsampling',()=>{
