@@ -1,5 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { readPrivateIcon } from './icons.mjs';
+import { proxyReport } from './proxy.mjs';
 
 export function safeApplications(input) {
   return (Array.isArray(input) ? input : []).slice(0,200).flatMap(a => {
@@ -10,26 +11,6 @@ export function safeApplications(input) {
     } catch { return []; }
   });
 }
-const seconds=value=>{const n=Date.parse(value);return Number.isFinite(n)?n/1000:null;};
-// CLI Proxy's recovered quota endpoint uses fractions, not percentages.
-const fractionPercent=value=>typeof value==='number'&&Number.isFinite(value)&&value>=0&&value<=1?Math.round(value*100*1e6)/1e6:null;
-function weeklyUsed(account) {
-  const capacity=account.kappa===undefined?1:account.kappa;
-  if (typeof capacity!=='number'||!Number.isFinite(capacity)||capacity<=0) return null;
-  const left=fractionPercent(typeof account.left==='number'?account.left/capacity:null);
-  return left===null?null:100-left;
-}
-export function proxyReport(raw) {
-  return {status:raw.stale?'stale':'connected',observedAt:Date.parse(raw.generated_at)||null,
-    accounts:(Array.isArray(raw.accounts)?raw.accounts:[]).slice(0,50).map((a,i)=>({
-      id:`account-${i+1}`,name:String(a.name||`Account ${i+1}`).slice(0,120),status:String(a.status||'unknown').slice(0,30),
-      observedAt:Date.parse(a.last_sample_at)||null,reportStale:raw.stale===true,
-      source:['header','usage'].includes(a.last_source)?a.last_source:null,windows:[
-        {id:'five-hour',label:'5-hour window',usedPercent:fractionPercent(a.used_5h),resetsAt:seconds(a.resets_5h),durationMins:300},
-        {id:'weekly',label:'Weekly window',usedPercent:weeklyUsed(a),resetsAt:seconds(a.resets),durationMins:10080},
-      ].filter(w=>w.usedPercent!==null),
-    }))};
-}
 export class Integrations {
   constructor(config) { this.config=config;this.cached=null;this.pending=null; }
   applications() { try { return safeApplications(JSON.parse(readFileSync(this.config.applicationsFile,'utf8'))); } catch { return []; } }
@@ -38,21 +19,28 @@ export class Integrations {
     return readPrivateIcon(this.config.iconsDirectory,filename);
   }
   // refresh=true uses the quota fork's fixed sibling route (POST .../refresh), which
-  // polls each account's usage now and returns the same report. Loopback only.
+  // polls each account's usage now and returns the same report. The reserve and
+  // credential reads are fixed siblings of the same management API. Loopback only.
   async readProxy(refresh=false) {
     const p=this.config.proxy;
     if (!p) return {status:'unavailable',accounts:[]};
     try {
       const url=new URL(p.endpoint);
       if (!['127.0.0.1','localhost','[::1]'].includes(url.hostname)) throw new Error('Loopback endpoint required');
-      if (refresh) url.pathname=`${url.pathname.replace(/\/+$/,'')}/refresh`;
       const line=readFileSync(p.keyFile,'utf8').split('\n').find(s=>s.startsWith(`${p.keyVariable}=`));
       const key=line?.slice(line.indexOf('=')+1).trim().replace(/^(['"])(.*)\1$/,'$2');
       if (!key) throw new Error('Unavailable key');
-      const r=await fetch(url,{method:refresh?'POST':'GET',headers:{Authorization:`Bearer ${key}`},signal:AbortSignal.timeout(refresh?20000:8000),redirect:'error'});
-      if (!r.ok) throw new Error('Proxy unavailable');
-      const raw=await r.text();if(raw.length>2_000_000)throw new Error('Response too large');
-      return proxyReport(JSON.parse(raw));
+      const read=async(path,method='GET',timeout=8000)=>{
+        const target=new URL(url);target.pathname=path;
+        const r=await fetch(target,{method,headers:{Authorization:`Bearer ${key}`},signal:AbortSignal.timeout(timeout),redirect:'error'});
+        if (!r.ok) throw new Error('Proxy unavailable');
+        const raw=await r.text();if(raw.length>4_000_000)throw new Error('Response too large');
+        return JSON.parse(raw);
+      };
+      const report=url.pathname.replace(/\/+$/,''), base=report.endsWith('/routing/quota')?report.slice(0,-'/routing/quota'.length):null;
+      const optional=path=>base?read(`${base}${path}`).catch(()=>null):Promise.resolve(null);
+      const [raw,reserve,credentials]=await Promise.all([refresh?read(`${report}/refresh`,'POST',20000):read(report),optional('/routing/quota/reserve'),optional('/credentials')]);
+      return proxyReport(raw,{reserve,credentials});
     } catch { return {status:'unavailable',accounts:[]}; }
   }
   async refreshProxy() {

@@ -80,7 +80,9 @@ or credentials were used.
 
 ![Fan RPM history and a qualitative sound estimate using sample data](docs/screenshots/cooling.png)
 
-![Correct quota percentages with current and historical sample account readings](docs/screenshots/quotas.png)
+![Claude pace page: pace summary, quota forecast, accounts with weekly reserve, reset credits and sign-ins, sample data](docs/screenshots/claude-pace.png)
+
+![Claude pace page on a phone, sample data](docs/screenshots/claude-pace-phone.png)
 
 ![GPU and CPU showcase at idle, sample data](docs/screenshots/compute-idle.png)
 
@@ -95,7 +97,8 @@ Every card and details modal has a refresh control. `POST /api/refresh/<source>`
 
 - `proxmox` re-reads the Proxmox API now.
 - `proxy` calls CLI Proxy's fixed loopback `.../routing/quota/refresh` route,
-  which polls each account's usage, then bypasses the 15-second cache.
+  which polls each account's usage, then bypasses the 15-second cache. The
+  Claude pace page asks for this once each time it opens.
 - Collector scopes (`host`, `router`, `agents`, `quotas`, `compute`, `guest:<id>`)
   are handed to the authenticated bridge through a long-poll at
   `GET /api/ingest/requests`. The reply only names scopes the collector is
@@ -184,7 +187,13 @@ and credentials must stay in private runtime files. Do not add a real catalogue
 or credential example here. Tests use synthetic application and account names.
 
 The authenticated `/api/integrations` endpoint exposes only selected account
-quota fields and the operator's configured application catalogue. Management
+quota fields and the operator's configured application catalogue. For the
+Claude pace page it also reads two fixed siblings of the configured quota
+endpoint, `.../routing/quota/reserve` and `.../credentials`, and passes on only
+allowlisted fields (`server/proxy.mjs`): pace forecast, reset credits, queued
+resets, weekly reserve, and per-account sign-in health. Tokens, credential file
+paths, and credential IDs never leave the server. A rate-limited account is
+shown as signed in and limited, not as a broken sign-in. Management
 credentials remain server-side. Application links use IDs resolved from that
 catalogue; arbitrary redirect destinations are rejected.
 
