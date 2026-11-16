@@ -1,3 +1,4 @@
+import { dashboardReturnTo } from '../src/navigation.js';
 import * as oidc from 'openid-client';
 import { randomBytes } from 'node:crypto';
 
@@ -16,10 +17,10 @@ export class Auth {
     if (!this.discovery) this.discovery = oidc.discovery(new URL(this.config.issuer), this.config.clientId, this.config.clientSecret).catch(error => { this.discovery = null; throw error; });
     return this.discovery;
   }
-  async begin() {
+  async begin(returnTo) {
     const config = await this.client(), verifier = oidc.randomPKCECodeVerifier(), state = oidc.randomState(), nonce = oidc.randomNonce();
     const browser = randomBytes(32).toString('base64url');
-    this.store.login(browser, { verifier, state, nonce });
+    this.store.login(browser, { verifier, state, nonce, returnTo: dashboardReturnTo(returnTo) });
     const url = oidc.buildAuthorizationUrl(config, { redirect_uri: this.config.callback, scope: 'openid profile email', code_challenge: await oidc.calculatePKCECodeChallenge(verifier), code_challenge_method: 'S256', state, nonce });
     return { browser, url: url.href };
   }
@@ -32,6 +33,6 @@ export class Auth {
     const claims = tokens.claims();
     const info = await oidc.fetchUserInfo(config, tokens.access_token, claims.sub);
     if (!this.config.allowedUsers?.includes(info.preferred_username)) throw new Error('This account does not have access to Homebase.');
-    return this.store.session({ id: info.sub, name: info.name || info.preferred_username, username: info.preferred_username });
+    return { ...this.store.session({ id: info.sub, name: info.name || info.preferred_username, username: info.preferred_username }), returnTo: dashboardReturnTo(flow.returnTo) };
   }
 }

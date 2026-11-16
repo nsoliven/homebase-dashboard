@@ -70,12 +70,12 @@ export function createApp(config, store, monitor, auth = new Auth(config.oidc, s
         if (limiter.size > 1000) limiter.clear();
         limiter.set(key, (limiter.get(key) || 0) + 1);
         if (limiter.get(key) > 30) return json(res, 429, { error: 'Please wait before trying again.' });
-        const result = await auth.begin();
+        const result = await auth.begin(url.searchParams.get('returnTo'));
         return redirect(res, result.url, setCookie(loginCookie, result.browser, 600));
       }
       if (url.pathname === '/auth/callback' && req.method === 'GET') {
         const result = await auth.complete(cookie(req, loginCookie), `${origin}${req.url}`);
-        return redirect(res, '/', [setCookie(sessionCookie, result.token, 43200), setCookie(loginCookie, '', 0)]);
+        return redirect(res, result.returnTo, [setCookie(sessionCookie, result.token, 43200), setCookie(loginCookie, '', 0)]);
       }
       if (url.pathname.startsWith('/api/') && !session) return json(res, 401, { error: 'Sign in to Homebase.' });
       if (req.method === 'POST' && (req.headers.origin !== origin || req.headers['x-homebase-csrf'] !== session?.csrf)) return json(res, 403, { error: 'Request verification failed.' });

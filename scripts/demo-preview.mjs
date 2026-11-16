@@ -144,7 +144,7 @@ http.createServer(async(req,res)=>{
   else if(url.pathname.startsWith('/api/')||url.pathname.startsWith('/auth/')){res.writeHead(404);res.end('Demo links are disabled.');return;}
   if(data){res.writeHead(200,{'Content-Type':'application/json','Cache-Control':'no-store'});res.end(JSON.stringify(data));return;}
   try{
-    const filename=resolve(root,'.'+(url.pathname.endsWith('/')?url.pathname+'index.html':url.pathname));
+    const filename=resolve(root,'.'+(!extname(url.pathname)?'/index.html':url.pathname));
     if(!filename.startsWith(root+sep)&&filename!==resolve(root,'index.html'))throw new Error('Invalid path');
     let body=await readFile(filename);
     if(filename===resolve(root,'index.html'))body=Buffer.from(body.toString().replace('</body>','<div style="position:fixed;bottom:8px;right:14px;padding:5px 9px;border:1px solid #2a303d;border-radius:6px;background:#11141b;color:#a3a9b8;font:11px system-ui;z-index:9999">Sample data · screenshot demo</div></body>'));
